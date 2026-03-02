@@ -43,8 +43,8 @@ type ToolRouter<S> = rmcp::handler::server::router::tool::ToolRouter<S>;
 struct StoreMemoryParams {
     #[schemars(description = "The content to store as a memory. Can be a fact, note, preference, decision, code pattern, or any information worth remembering across conversations.")]
     content: String,
-    #[schemars(description = "Tags to categorize the memory for later filtering (e.g. [\"rust\", \"debugging\", \"project-x\"]). Memories can be retrieved by tag without semantic search.")]
-    tags: Option<Vec<String>>,
+    #[schemars(description = "Tags to categorize the memory across multiple dimensions. Include ALL that apply: language (rust, python), domain (networking, auth), activity (debugging, deployment, testing), tool (docker, git, postgres), project name, and any other relevant category. Prefer lowercase, singular, hyphenated (e.g. error-handling). More tags is always better — they cost nothing and improve retrieval. Aim for at least 3 tags per memory.")]
+    tags: Vec<String>,
 }
 
 #[derive(Debug, Deserialize, schemars::JsonSchema)]
@@ -65,14 +65,14 @@ struct SearchByTagParams {
 
 #[tool_router]
 impl MemoryMcp {
-    #[tool(description = "Store a new memory with optional tags. Use this to persist facts, preferences, decisions, patterns, or any information that should be remembered across conversations. Memories are embedded for semantic retrieval and can also be filtered by tags.")]
+    #[tool(description = "Store a new memory with tags. Tag generously across every relevant dimension — language, domain, tool, activity, project. A memory about 'fixing a postgres connection pool timeout in rust' should get at least [project-name, rust, postgres, connection-pooling, debugging, performance]. Err on the side of too many tags.")]
     async fn store_memory(
         &self,
         Parameters(params): Parameters<StoreMemoryParams>,
     ) -> Result<String, String> {
         let input = CreateMemory {
             content: params.content,
-            tags: params.tags.unwrap_or_default(),
+            tags: params.tags,
         };
         let memory = self
             .store
@@ -130,7 +130,8 @@ impl ServerHandler for MemoryMcp {
             instructions: Some(concat!(
                 "Persistent semantic memory for LLM agents. ",
                 "On session start: call `search_by_tag` with the current project name, then `recall_memory` with a query relevant to the user's request. ",
-                "After solving a non-trivial problem or learning a user preference: call `store_memory` with the finding. Always include the project name as a tag. ",
+                "After solving a non-trivial problem or learning a user preference: call `store_memory` with the finding. ",
+                "Tag every memory with the project name plus all relevant categories (language, domain, tool, activity, concept). Aim for at least 3 tags per memory. More tags is always better than fewer. ",
                 "Prefer `recall_memory` for open-ended lookups, `search_by_tag` for known categories. ",
             ).to_string()),
         }
