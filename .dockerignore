@@ -1,0 +1,10 @@
+target/
+.git/
+.claude/
+.fastembed_cache/
+.env*
+*.md
+docs/
+memory.db
+memory.db-shm
+memory.db-wal

@@ -1,0 +1,18 @@
+[package]
+name = "memory-ui"
+edition.workspace = true
+version.workspace = true
+
+[dependencies]
+memory-core.workspace = true
+axum.workspace = true
+tokio-rusqlite.workspace = true
+askama.workspace = true
+askama_web.workspace = true
+axum-htmx.workspace = true
+rust-embed.workspace = true
+axum-embed.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+chrono.workspace = true
+tracing.workspace = true

@@ -1,0 +1,89 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <script>
+        (function() {
+            var s = localStorage.getItem('theme');
+            var t = s || (matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light');
+            document.documentElement.setAttribute('data-theme', t);
+        })();
+    </script>
+    <title>Memory</title>
+    <link rel="stylesheet" href="/static/style.css">
+    <script src="/static/htmx.min.js"></script>
+</head>
+<body>
+    <header>
+        <div class="header-inner">
+            <div class="header-left">
+                <strong class="logo">Memory</strong>
+            </div>
+            <div class="search-wrapper">
+                <input type="search"
+                       class="search-bar"
+                       name="q"
+                       placeholder="Search memories..."
+                       hx-get="/ui/memories"
+                       hx-trigger="input changed delay:300ms, search"
+                       hx-target="#card-grid"
+                       hx-push-url="true"
+                       hx-indicator="#search-indicator">
+                <span id="search-indicator" class="htmx-indicator" aria-busy="true"></span>
+                <button class="theme-toggle" onclick="toggleTheme()" aria-label="Toggle theme">
+                    <svg class="icon-sun" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/>
+                    </svg>
+                    <svg class="icon-moon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/>
+                    </svg>
+                </button>
+            </div>
+        </div>
+    </header>
+    <main class="layout">
+        <aside class="sidebar"
+               hx-get="/ui/tags"
+               hx-trigger="load, memoryChanged from:body"
+               hx-swap="innerHTML">
+        </aside>
+        <section id="card-grid"
+                 hx-get="/ui/memories"
+                 hx-trigger="load"
+                 hx-swap="innerHTML">
+        </section>
+    </main>
+    <script>
+        function toggleTheme() {
+            var cur = document.documentElement.getAttribute('data-theme');
+            var next = cur === 'dark' ? 'light' : 'dark';
+            document.documentElement.setAttribute('data-theme', next);
+            localStorage.setItem('theme', next);
+        }
+
+        function setActiveTag(el) {
+            document.querySelectorAll('.sidebar li a').forEach(function(a) {
+                a.classList.remove('active');
+            });
+            el.classList.add('active');
+        }
+
+        matchMedia('(prefers-color-scheme: dark)').addEventListener('change', function(e) {
+            if (!localStorage.getItem('theme')) {
+                document.documentElement.setAttribute('data-theme', e.matches ? 'dark' : 'light');
+            }
+        });
+
+        document.addEventListener('htmx:afterSettle', function(e) {
+            if (e.detail.target && e.detail.target.classList &&
+                e.detail.target.classList.contains('vote-section')) {
+                e.detail.target.classList.add('vote-flash');
+                setTimeout(function() {
+                    e.detail.target.classList.remove('vote-flash');
+                }, 300);
+            }
+        });
+    </script>
+</body>
+</html>

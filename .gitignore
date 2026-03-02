@@ -1,0 +1,7 @@
+.claude/
+target/
+.fastembed_cache/
+.env*
+memory.db
+memory.db-shm
+memory.db-wal

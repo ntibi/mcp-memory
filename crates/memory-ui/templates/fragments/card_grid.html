@@ -1,0 +1,15 @@
+{% for card in memories %}
+{% include "fragments/card.html" %}
+{% endfor %}
+{% if has_more %}
+<div id="load-more" hx-swap-oob="true">
+    <button hx-get="/ui/memories?cursor={{ next_cursor }}&q={{ query }}&tag={{ tag }}"
+            hx-target="#card-grid"
+            hx-swap="beforeend"
+            hx-indicator="#load-indicator"
+            class="outline">
+        Load more
+    </button>
+    <span id="load-indicator" class="htmx-indicator" aria-busy="true"></span>
+</div>
+{% endif %}

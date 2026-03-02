@@ -1,0 +1,40 @@
+[workspace]
+members = ["crates/*"]
+resolver = "3"
+
+[workspace.package]
+edition = "2024"
+version = "0.1.0"
+
+[workspace.dependencies]
+memory-core = { path = "crates/memory-core" }
+axum = "0.8"
+tokio = { version = "1", features = ["full"] }
+tokio-rusqlite = "0.6"
+rusqlite = { version = "0.32", features = ["bundled"] }
+sqlite-vec = "0.1.6"
+zerocopy = "0.7"
+rmcp = { version = "0.16", features = ["server", "macros", "transport-streamable-http-server"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+schemars = "1.0"
+config = { version = "0.14", features = ["toml"] }
+clap = { version = "4.5", features = ["derive"] }
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter", "json"] }
+tower = "0.5"
+tower-http = { version = "0.6", features = ["trace", "cors"] }
+thiserror = "2"
+ulid = "1"
+chrono = { version = "0.4", features = ["serde"] }
+reqwest = { version = "0.12", features = ["json"] }
+axum-test = "18"
+subtle = "2"
+anyhow = "1"
+fastembed = "5"
+memory-ui = { path = "crates/memory-ui" }
+askama = "0.15"
+askama_web = { version = "0.15", features = ["axum-0.8"] }
+axum-htmx = "0.8"
+rust-embed = "8"
+axum-embed = "0.1"

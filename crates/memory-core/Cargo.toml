@@ -1,0 +1,22 @@
+[package]
+name = "memory-core"
+edition.workspace = true
+version.workspace = true
+
+[dependencies]
+tokio-rusqlite.workspace = true
+rusqlite.workspace = true
+sqlite-vec.workspace = true
+zerocopy.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+thiserror.workspace = true
+ulid.workspace = true
+chrono.workspace = true
+tracing.workspace = true
+reqwest.workspace = true
+fastembed.workspace = true
+tokio.workspace = true
+
+[dev-dependencies]
+tokio = { workspace = true }

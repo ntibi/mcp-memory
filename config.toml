@@ -1,0 +1,38 @@
+# memory-server configuration
+
+# Address to listen on
+listen_addr = "127.0.0.1:8000"
+
+# Path to SQLite database file
+db_path = "memory.db"
+
+# API key for authenticating requests (empty = no auth)
+api_key = ""
+
+[embedding]
+# Embedding provider: "local" or "remote"
+provider = "local"
+# Model name for embeddings
+model = "all-MiniLM-L6-v2"
+# API key for remote embedding provider (optional)
+# api_key = ""
+# API URL for remote embedding provider (optional)
+# api_url = ""
+
+[scoring]
+# Weights for memory scoring (should sum to 1.0)
+relevance_weight = 0.6
+confidence_weight = 0.25
+recency_weight = 0.15
+
+[curation]
+# Interval in seconds between curation runs
+interval_secs = 3600
+# Similarity threshold for duplicate detection
+similarity_threshold = 0.85
+
+# Optional LLM configuration for curation
+# [curation.llm]
+# api_key = ""
+# model = "gpt-4"
+# api_url = "https://api.openai.com/v1"

@@ -1,0 +1,20 @@
+<ul>
+    <li><a href="#"
+           hx-get="/ui/memories"
+           hx-target="#card-grid"
+           hx-push-url="/ui"
+           onclick="setActiveTag(this)"
+           {% if active_tag.is_empty() %}class="active"{% endif %}>
+        All <span>{{ total_count }}</span>
+    </a></li>
+    {% for tag in tags %}
+    <li><a href="#"
+           hx-get="/ui/memories?tag={{ tag.0 }}"
+           hx-target="#card-grid"
+           hx-push-url="/ui?tag={{ tag.0 }}"
+           onclick="setActiveTag(this)"
+           {% if active_tag == tag.0 %}class="active"{% endif %}>
+        {{ tag.0 }} <span>{{ tag.1 }}</span>
+    </a></li>
+    {% endfor %}
+</ul>

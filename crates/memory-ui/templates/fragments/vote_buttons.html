@@ -1,0 +1,8 @@
+<button hx-post="/ui/memories/{{ card.id }}/vote?vote=helpful"
+        hx-target="#votes-{{ card.id }}"
+        hx-swap="innerHTML">&#9650;</button>
+<span class="count">{{ card.helpful }}</span>
+<button hx-post="/ui/memories/{{ card.id }}/vote?vote=harmful"
+        hx-target="#votes-{{ card.id }}"
+        hx-swap="innerHTML">&#9660;</button>
+<span class="count">{{ card.harmful }}</span>

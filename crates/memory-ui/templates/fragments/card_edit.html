@@ -1,0 +1,17 @@
+<article class="memory-card" id="memory-{{ card.id }}">
+    <form hx-put="/ui/memories/{{ card.id }}"
+          hx-target="#memory-{{ card.id }}"
+          hx-swap="outerHTML">
+        <textarea name="content" rows="6">{{ card.content }}</textarea>
+        <label>Tags (comma-separated)
+            <input type="text" name="tags" value="{{ card.tags|join(", ") }}">
+        </label>
+        <div class="grid">
+            <button type="submit">Save</button>
+            <button type="button"
+                    hx-get="/ui/memories/{{ card.id }}/card"
+                    hx-target="#memory-{{ card.id }}"
+                    hx-swap="outerHTML">Cancel</button>
+        </div>
+    </form>
+</article>

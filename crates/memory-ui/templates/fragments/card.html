@@ -1,0 +1,24 @@
+<article class="memory-card" id="memory-{{ card.id }}">
+    <div class="content" id="content-{{ card.id }}">{{ card.content }}</div>
+    <div class="tags" id="tags-{{ card.id }}">
+        {% for tag in card.tags %}
+        <a href="#" class="tag"
+           hx-get="/ui/memories?tag={{ tag }}"
+           hx-target="#card-grid"
+           hx-push-url="true">{{ tag }}</a>
+        {% endfor %}
+    </div>
+    <div class="actions">
+        <span class="vote-section" id="votes-{{ card.id }}">
+            {% include "fragments/vote_buttons.html" %}
+        </span>
+        <button hx-get="/ui/memories/{{ card.id }}/edit"
+                hx-target="#memory-{{ card.id }}"
+                hx-swap="outerHTML">edit</button>
+        <button hx-delete="/ui/memories/{{ card.id }}"
+                hx-target="#memory-{{ card.id }}"
+                hx-swap="outerHTML swap:500ms"
+                hx-confirm="Delete this memory?">delete</button>
+    </div>
+    <div class="meta">{{ card.age }} &middot; confidence: {{ card.confidence }}</div>
+</article>
