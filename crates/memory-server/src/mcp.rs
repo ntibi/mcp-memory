@@ -41,31 +41,31 @@ type ToolRouter<S> = rmcp::handler::server::router::tool::ToolRouter<S>;
 
 #[derive(Debug, Deserialize, schemars::JsonSchema)]
 struct StoreMemoryParams {
-    #[schemars(description = "The content to store as a memory")]
+    #[schemars(description = "The content to store as a memory. Can be a fact, note, preference, decision, code pattern, or any information worth remembering across conversations.")]
     content: String,
-    #[schemars(description = "Optional tags to categorize the memory")]
+    #[schemars(description = "Tags to categorize the memory for later filtering (e.g. [\"rust\", \"debugging\", \"project-x\"]). Memories can be retrieved by tag without semantic search.")]
     tags: Option<Vec<String>>,
 }
 
 #[derive(Debug, Deserialize, schemars::JsonSchema)]
 struct RecallMemoryParams {
-    #[schemars(description = "Natural language query for semantic search")]
+    #[schemars(description = "Natural language query describing what you're looking for. Be specific — 'rust async error handling patterns' works better than 'rust'.")]
     query: String,
-    #[schemars(description = "Maximum number of results to return (default: 5)")]
+    #[schemars(description = "Maximum number of results to return (default: 5). Higher values return more results but may include less relevant matches.")]
     n: Option<usize>,
 }
 
 #[derive(Debug, Deserialize, schemars::JsonSchema)]
 struct SearchByTagParams {
-    #[schemars(description = "Tag to search for")]
+    #[schemars(description = "Exact tag to filter by (case-sensitive). Returns all memories that have this tag.")]
     tag: String,
-    #[schemars(description = "Maximum number of results to return (default: 10)")]
+    #[schemars(description = "Maximum number of results to return (default: 10).")]
     n: Option<usize>,
 }
 
 #[tool_router]
 impl MemoryMcp {
-    #[tool(description = "Store a new memory with optional tags")]
+    #[tool(description = "Store a new memory with optional tags. Use this to persist facts, preferences, decisions, patterns, or any information that should be remembered across conversations. Memories are embedded for semantic retrieval and can also be filtered by tags.")]
     async fn store_memory(
         &self,
         Parameters(params): Parameters<StoreMemoryParams>,
@@ -82,7 +82,7 @@ impl MemoryMcp {
         serde_json::to_string(&memory).map_err(|e| e.to_string())
     }
 
-    #[tool(description = "Recall memories using semantic search")]
+    #[tool(description = "Recall memories using semantic search. Finds stored memories most relevant to the query using vector similarity, ranked by relevance, confidence, and recency. Use this for open-ended lookups where you don't know the exact category — describe what you're looking for in natural language.")]
     async fn recall_memory(
         &self,
         Parameters(params): Parameters<RecallMemoryParams>,
@@ -101,7 +101,7 @@ impl MemoryMcp {
         serde_json::to_string(&results).map_err(|e| e.to_string())
     }
 
-    #[tool(description = "Search memories by exact tag match")]
+    #[tool(description = "Search memories by exact tag match. Returns all memories tagged with the specified tag, ordered by creation time. Use this when you know the category of information you're looking for rather than searching by content.")]
     async fn search_by_tag(
         &self,
         Parameters(params): Parameters<SearchByTagParams>,
@@ -127,9 +127,13 @@ impl ServerHandler for MemoryMcp {
                 version: env!("CARGO_PKG_VERSION").to_string(),
                 ..Default::default()
             },
-            instructions: Some(
-                "Memory storage and retrieval service with semantic search.".to_string(),
-            ),
+            instructions: Some(concat!(
+                "Persistent semantic memory for LLM agents. ",
+                "On session start: call `search_by_tag` with the current project name, then `recall_memory` with a query relevant to the user's request. ",
+                "After solving a non-trivial problem or learning a user preference: call `store_memory` with the finding. Always include the project name as a tag. ",
+                "Prefer `recall_memory` for open-ended lookups, `search_by_tag` for known categories. ",
+                "Do not store transient task context or information already available in the codebase.",
+            ).to_string()),
         }
     }
 }
