@@ -17,4 +17,5 @@ RUN apt-get update && apt-get install -y --no-install-recommends ca-certificates
 COPY --from=builder /app/target/release/memory-server /usr/local/bin/memory-server
 COPY config.toml /etc/memory/config.toml
 EXPOSE 8000
-ENTRYPOINT ["memory-server", "--config", "/etc/memory/config.toml"]
+ENTRYPOINT ["memory-server"]
+CMD ["--config", "/etc/memory/config.toml"]
