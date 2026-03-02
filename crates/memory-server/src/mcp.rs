@@ -132,7 +132,6 @@ impl ServerHandler for MemoryMcp {
                 "On session start: call `search_by_tag` with the current project name, then `recall_memory` with a query relevant to the user's request. ",
                 "After solving a non-trivial problem or learning a user preference: call `store_memory` with the finding. Always include the project name as a tag. ",
                 "Prefer `recall_memory` for open-ended lookups, `search_by_tag` for known categories. ",
-                "Do not store transient task context or information already available in the codebase.",
             ).to_string()),
         }
     }
