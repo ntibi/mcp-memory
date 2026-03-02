@@ -166,6 +166,20 @@ impl MemoryStore {
             })
     }
 
+    pub async fn count(&self) -> Result<usize> {
+        self.conn
+            .call(|conn| {
+                let count = conn.query_row(
+                    "SELECT COUNT(*) FROM memories",
+                    [],
+                    |row| row.get(0),
+                )?;
+                Ok(count)
+            })
+            .await
+            .map_err(Error::Database)
+    }
+
     pub async fn list(&self, filter: ListFilter) -> Result<Vec<Memory>> {
         let limit = filter.limit.unwrap_or(50);
         let offset = filter.offset.unwrap_or(0);

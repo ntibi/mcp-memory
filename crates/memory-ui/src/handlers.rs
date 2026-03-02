@@ -30,12 +30,16 @@ pub async fn list_memories(
     Query(q): Query<MemoryQuery>,
 ) -> Response {
     let limit = 20;
+    let offset = q.cursor.as_deref().and_then(|c| c.parse::<usize>().ok()).unwrap_or(0);
+    let is_semantic = q.q.as_ref().is_some_and(|s| !s.is_empty());
+    let tag = q.tag.as_deref().filter(|t| !t.is_empty()).map(|t| t.to_string());
+
     let memories = if let Some(ref query) = q.q {
         if query.is_empty() {
             state.store.list(memory_core::memory::ListFilter {
-                tag: q.tag.clone(),
+                tag: tag.clone(),
                 limit: Some(limit + 1),
-                offset: None,
+                offset: Some(offset),
             }).await
         } else {
             match state.store.recall(query, limit + 1, state.embedder.as_ref(), state.scorer.as_ref()).await {
@@ -47,13 +51,13 @@ pub async fn list_memories(
         state.store.list(memory_core::memory::ListFilter {
             tag: q.tag.clone(),
             limit: Some(limit + 1),
-            offset: None,
+            offset: Some(offset),
         }).await
     };
 
     match memories {
         Ok(mut mems) => {
-            let has_more = mems.len() > limit;
+            let has_more = !is_semantic && mems.len() > limit;
             mems.truncate(limit);
 
             let mut cards = Vec::new();
@@ -62,14 +66,14 @@ pub async fn list_memories(
                 cards.push(MemoryCard::from_memory(m, helpful, harmful));
             }
 
-            let next_cursor = cards.last().map(|c| c.id.clone()).unwrap_or_default();
+            let next_cursor = (offset + cards.len()).to_string();
 
             CardGridTemplate {
                 memories: cards,
                 has_more,
                 next_cursor,
                 query: q.q.unwrap_or_default(),
-                tag: q.tag.unwrap_or_default(),
+                tag: tag.clone().unwrap_or_default(),
             }.into_response()
         }
         Err(e) => {
@@ -85,7 +89,7 @@ pub async fn list_tags(
 ) -> Response {
     match state.store.list_tags().await {
         Ok(tags) => {
-            let total_count: usize = tags.iter().map(|t| t.1).sum();
+            let total_count = state.store.count().await.unwrap_or(0);
             TagSidebarTemplate {
                 tags,
                 total_count,
