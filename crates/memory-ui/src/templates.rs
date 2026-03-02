@@ -50,7 +50,9 @@ fn format_age(dt: DateTime<Utc>) -> String {
 
 #[derive(Template, WebTemplate)]
 #[template(path = "layout.html")]
-pub struct LayoutTemplate;
+pub struct LayoutTemplate {
+    pub tag: String,
+}
 
 #[derive(Template, WebTemplate)]
 #[template(path = "fragments/card_grid.html")]

@@ -44,12 +44,12 @@
     </header>
     <main class="layout">
         <aside class="sidebar"
-               hx-get="/ui/tags"
+               hx-get="/ui/tags{% if !tag.is_empty() %}?tag={{ tag }}{% endif %}"
                hx-trigger="load, memoryChanged from:body"
                hx-swap="innerHTML">
         </aside>
         <section id="card-grid"
-                 hx-get="/ui/memories"
+                 hx-get="/ui/memories{% if !tag.is_empty() %}?tag={{ tag }}{% endif %}"
                  hx-trigger="load"
                  hx-swap="innerHTML">
         </section>
