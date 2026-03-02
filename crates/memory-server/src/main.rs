@@ -80,14 +80,17 @@ async fn main() -> anyhow::Result<()> {
 
     let api_key = ApiKey(settings.api_key.clone());
 
-    let router = axum::Router::new()
+    let authed = axum::Router::new()
         .nest_service("/mcp", mcp_service)
+        .layer(axum::middleware::from_fn(auth::bearer_auth))
+        .layer(axum::Extension(api_key));
+
+    let router = axum::Router::new()
+        .merge(authed)
         .nest("/api/v1", api::router().with_state(app_state))
         .nest("/ui", memory_ui::router().with_state(ui_state))
         .nest_service("/static", memory_ui::static_service())
         .route("/", axum::routing::get(|| async { axum::response::Redirect::to("/ui") }))
-        .layer(axum::middleware::from_fn(auth::bearer_auth))
-        .layer(axum::Extension(api_key))
         .layer(tower_http::trace::TraceLayer::new_for_http());
 
     let listener = tokio::net::TcpListener::bind(&settings.listen_addr).await?;
