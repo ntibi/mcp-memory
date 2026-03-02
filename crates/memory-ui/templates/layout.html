@@ -44,18 +44,33 @@
     </header>
     <main class="layout">
         <aside class="sidebar"
-               hx-get="/ui/tags{% if !tag.is_empty() %}?tag={{ tag }}{% endif %}"
+               hx-get="/ui/tags"
                hx-trigger="load, memoryChanged from:body"
                hx-swap="innerHTML">
         </aside>
         <section id="card-grid"
-                 hx-get="/ui/memories{% if !tag.is_empty() %}?tag={{ tag }}{% endif %}"
+                 hx-get="/ui/memories"
                  hx-trigger="load"
                  hx-swap="innerHTML">
         </section>
         <div id="load-more"></div>
     </main>
     <script>
+        var currentTag = new URLSearchParams(window.location.search).get('tag') || '';
+
+        (function() {
+            if (currentTag) {
+                var grid = document.getElementById('card-grid');
+                if (grid) grid.setAttribute('hx-get', '/ui/memories?tag=' + encodeURIComponent(currentTag));
+            }
+        })();
+
+        document.body.addEventListener('htmx:configRequest', function(e) {
+            if (e.detail.elt.classList.contains('sidebar')) {
+                e.detail.parameters.tag = currentTag;
+            }
+        });
+
         function toggleTheme() {
             var cur = document.documentElement.getAttribute('data-theme');
             var next = cur === 'dark' ? 'light' : 'dark';
@@ -69,6 +84,22 @@
             });
             el.classList.add('active');
         }
+
+        document.body.addEventListener('click', function(e) {
+            var sidebarTag = e.target.closest('.sidebar li a');
+            if (sidebarTag) {
+                var href = sidebarTag.getAttribute('hx-push-url') || '';
+                var params = new URLSearchParams(href.split('?')[1] || '');
+                currentTag = params.get('tag') || '';
+                return;
+            }
+
+            var cardTag = e.target.closest('.tags a.tag');
+            if (cardTag) {
+                currentTag = cardTag.textContent.trim();
+                htmx.ajax('GET', '/ui/tags?tag=' + encodeURIComponent(currentTag), {target: '.sidebar', swap: 'innerHTML'});
+            }
+        });
 
         matchMedia('(prefers-color-scheme: dark)').addEventListener('change', function(e) {
             if (!localStorage.getItem('theme')) {

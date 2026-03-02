@@ -16,13 +16,11 @@ pub struct MemoryQuery {
     pub cursor: Option<String>,
 }
 
-pub async fn index(HxRequest(is_htmx): HxRequest, Query(q): Query<MemoryQuery>) -> Response {
+pub async fn index(HxRequest(is_htmx): HxRequest) -> Response {
     if is_htmx {
         StatusCode::OK.into_response()
     } else {
-        LayoutTemplate {
-            tag: q.tag.unwrap_or_default(),
-        }.into_response()
+        LayoutTemplate.into_response()
     }
 }
 
