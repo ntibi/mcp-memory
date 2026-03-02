@@ -133,6 +133,7 @@ impl ServerHandler for MemoryMcp {
                 "Store aggressively: after solving any non-trivial problem, learning a preference, or making an architectural decision, call `store_memory` immediately. Do not wait. ",
                 "Recall often: when encountering a new subtask, bug, or decision point mid-session, call `recall_memory` again with a relevant query. ",
                 "Tag every memory with the project name plus all relevant categories (language, domain, tool, activity, concept, subject, knowledge-type, scope). Aim for at least 3 tags per memory. More tags is always better than fewer. ",
+                "When a request is ambiguous, unclear, or seems to lack context: call `recall_memory` with the confusing parts before asking the user for clarification. Prior memories often contain the missing context. ",
                 "Prefer `recall_memory` for open-ended lookups, `search_by_tag` for known categories. ",
             ).to_string()),
         }
