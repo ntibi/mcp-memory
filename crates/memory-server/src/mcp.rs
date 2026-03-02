@@ -43,7 +43,7 @@ type ToolRouter<S> = rmcp::handler::server::router::tool::ToolRouter<S>;
 struct StoreMemoryParams {
     #[schemars(description = "The content to store as a memory. Can be a fact, note, preference, decision, code pattern, or any information worth remembering across conversations.")]
     content: String,
-    #[schemars(description = "Tags to categorize the memory across multiple dimensions. Include ALL that apply: language (rust, python), domain (networking, auth), activity (debugging, deployment, testing), tool (docker, git, postgres), project name, and any other relevant category. Prefer lowercase, singular, hyphenated (e.g. error-handling). More tags is always better — they cost nothing and improve retrieval. Aim for at least 3 tags per memory.")]
+    #[schemars(description = "Tags to categorize the memory across multiple dimensions. Include ALL that apply: project name, language (rust, python), domain (networking, auth), activity (debugging, deployment, testing), tool (docker, git, postgres), subject (user-preference, workflow, team-convention, machine-setup), knowledge type (gotcha, pattern, decision, workaround, preference), source context (code-review, debugging-session, documentation), tool/MCP context (claude-code, slack, github, terminal), scope (universal, project-specific, machine-specific). Prefer lowercase, singular, hyphenated. More tags is always better — they cost nothing and improve retrieval. Aim for at least 3 tags per memory.")]
     tags: Vec<String>,
 }
 
