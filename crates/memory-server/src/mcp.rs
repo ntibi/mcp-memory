@@ -129,9 +129,10 @@ impl ServerHandler for MemoryMcp {
             },
             instructions: Some(concat!(
                 "Persistent semantic memory for LLM agents. ",
-                "On session start: call `search_by_tag` with the current project name, then `recall_memory` with a query relevant to the user's request. ",
-                "After solving a non-trivial problem or learning a user preference: call `store_memory` with the finding. ",
-                "Tag every memory with the project name plus all relevant categories (language, domain, tool, activity, concept). Aim for at least 3 tags per memory. More tags is always better than fewer. ",
+                "MANDATORY on every session start: call `search_by_tag` with the current project name, then `recall_memory` with a query describing the user's first message. Do this BEFORE any other action. ",
+                "Store aggressively: after solving any non-trivial problem, learning a preference, or making an architectural decision, call `store_memory` immediately. Do not wait. ",
+                "Recall often: when encountering a new subtask, bug, or decision point mid-session, call `recall_memory` again with a relevant query. ",
+                "Tag every memory with the project name plus all relevant categories (language, domain, tool, activity, concept, subject, knowledge-type, scope). Aim for at least 3 tags per memory. More tags is always better than fewer. ",
                 "Prefer `recall_memory` for open-ended lookups, `search_by_tag` for known categories. ",
             ).to_string()),
         }
