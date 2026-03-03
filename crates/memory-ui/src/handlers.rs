@@ -26,9 +26,13 @@ pub async fn index(HxRequest(is_htmx): HxRequest) -> Response {
 
 pub async fn list_memories(
     State(state): State<UiState>,
-    HxRequest(_is_htmx): HxRequest,
+    HxRequest(is_htmx): HxRequest,
     Query(q): Query<MemoryQuery>,
 ) -> Response {
+    if !is_htmx {
+        return LayoutTemplate.into_response();
+    }
+
     let limit = 20;
     let offset = q.cursor.as_deref().and_then(|c| c.parse::<usize>().ok()).unwrap_or(0);
     let is_semantic = q.q.as_ref().is_some_and(|s| !s.is_empty());

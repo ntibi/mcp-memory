@@ -68,10 +68,19 @@
             return p ? base + '?tag=' + encodeURIComponent(p) : base;
         }
 
+        var currentQuery = new URLSearchParams(window.location.search).get('q') || '';
+
         (function() {
-            if (currentTags.length) {
-                var grid = document.getElementById('card-grid');
-                if (grid) grid.setAttribute('hx-get', '/ui/memories?tag=' + encodeURIComponent(tagParam()));
+            var grid = document.getElementById('card-grid');
+            if (grid) {
+                var params = [];
+                if (currentQuery) params.push('q=' + encodeURIComponent(currentQuery));
+                if (currentTags.length) params.push('tag=' + encodeURIComponent(tagParam()));
+                if (params.length) grid.setAttribute('hx-get', '/ui/memories?' + params.join('&'));
+            }
+            if (currentQuery) {
+                var input = document.querySelector('.search-bar');
+                if (input) input.value = currentQuery;
             }
         })();
 
