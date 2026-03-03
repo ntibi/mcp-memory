@@ -2,10 +2,7 @@
     <div class="content" id="content-{{ card.id }}">{{ card.content }}</div>
     <div class="tags" id="tags-{{ card.id }}">
         {% for tag in card.tags %}
-        <a href="#" class="tag"
-           hx-get="/ui/memories?tag={{ tag }}"
-           hx-target="#card-grid"
-           hx-push-url="true">{{ tag }}</a>
+        <a href="#" class="tag">{{ tag }}</a>
         {% endfor %}
     </div>
     <div class="actions">

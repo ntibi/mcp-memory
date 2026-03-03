@@ -56,18 +56,28 @@
         <div id="load-more"></div>
     </main>
     <script>
-        var currentTag = new URLSearchParams(window.location.search).get('tag') || '';
+        var currentTags = (new URLSearchParams(window.location.search).get('tag') || '')
+            .split(',').filter(function(t) { return t.length > 0; });
+
+        function tagParam() {
+            return currentTags.join(',');
+        }
+
+        function tagUrl(base) {
+            var p = tagParam();
+            return p ? base + '?tag=' + encodeURIComponent(p) : base;
+        }
 
         (function() {
-            if (currentTag) {
+            if (currentTags.length) {
                 var grid = document.getElementById('card-grid');
-                if (grid) grid.setAttribute('hx-get', '/ui/memories?tag=' + encodeURIComponent(currentTag));
+                if (grid) grid.setAttribute('hx-get', '/ui/memories?tag=' + encodeURIComponent(tagParam()));
             }
         })();
 
         document.body.addEventListener('htmx:configRequest', function(e) {
             if (e.detail.elt.classList.contains('sidebar')) {
-                e.detail.parameters.tag = currentTag;
+                e.detail.parameters.tag = tagParam();
             }
         });
 
@@ -78,26 +88,40 @@
             localStorage.setItem('theme', next);
         }
 
-        function setActiveTag(el) {
+        function clearTags(el) {
+            currentTags = [];
             document.querySelectorAll('.sidebar li a').forEach(function(a) {
                 a.classList.remove('active');
             });
             el.classList.add('active');
         }
 
-        document.body.addEventListener('click', function(e) {
-            var sidebarTag = e.target.closest('.sidebar li a');
-            if (sidebarTag) {
-                var href = sidebarTag.getAttribute('hx-push-url') || '';
-                var params = new URLSearchParams(href.split('?')[1] || '');
-                currentTag = params.get('tag') || '';
-                return;
+        function toggleTag(event, el) {
+            event.preventDefault();
+            var tag = el.getAttribute('data-tag');
+            var idx = currentTags.indexOf(tag);
+            if (idx >= 0) {
+                currentTags.splice(idx, 1);
+            } else {
+                currentTags.push(tag);
             }
+            var url = tagUrl('/ui/memories');
+            var pushUrl = tagUrl('/ui');
+            htmx.ajax('GET', url, {target: '#card-grid', swap: 'innerHTML'});
+            history.pushState({}, '', pushUrl || '/ui');
+            htmx.ajax('GET', '/ui/tags?tag=' + encodeURIComponent(tagParam()), {target: '.sidebar', swap: 'innerHTML'});
+        }
 
+        document.body.addEventListener('click', function(e) {
             var cardTag = e.target.closest('.tags a.tag');
             if (cardTag) {
-                currentTag = cardTag.textContent.trim();
-                htmx.ajax('GET', '/ui/tags?tag=' + encodeURIComponent(currentTag), {target: '.sidebar', swap: 'innerHTML'});
+                var tag = cardTag.textContent.trim();
+                if (currentTags.indexOf(tag) < 0) {
+                    currentTags = [tag];
+                }
+                htmx.ajax('GET', '/ui/tags?tag=' + encodeURIComponent(tagParam()), {target: '.sidebar', swap: 'innerHTML'});
+                htmx.ajax('GET', '/ui/memories?tag=' + encodeURIComponent(tagParam()), {target: '#card-grid', swap: 'innerHTML'});
+                history.pushState({}, '', tagUrl('/ui'));
             }
         });
 

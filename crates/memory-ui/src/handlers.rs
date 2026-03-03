@@ -32,12 +32,16 @@ pub async fn list_memories(
     let limit = 20;
     let offset = q.cursor.as_deref().and_then(|c| c.parse::<usize>().ok()).unwrap_or(0);
     let is_semantic = q.q.as_ref().is_some_and(|s| !s.is_empty());
-    let tag = q.tag.as_deref().filter(|t| !t.is_empty()).map(|t| t.to_string());
+    let tags: Vec<String> = q.tag.iter()
+        .flat_map(|t| t.split(','))
+        .map(|t| t.trim().to_string())
+        .filter(|t| !t.is_empty())
+        .collect();
 
     let memories = if let Some(ref query) = q.q {
         if query.is_empty() {
             state.store.list(memory_core::memory::ListFilter {
-                tag: tag.clone(),
+                tags: tags.clone(),
                 limit: Some(limit + 1),
                 offset: Some(offset),
             }).await
@@ -49,7 +53,7 @@ pub async fn list_memories(
         }
     } else {
         state.store.list(memory_core::memory::ListFilter {
-            tag: q.tag.clone(),
+            tags: tags.clone(),
             limit: Some(limit + 1),
             offset: Some(offset),
         }).await
@@ -73,7 +77,7 @@ pub async fn list_memories(
                 has_more,
                 next_cursor,
                 query: q.q.unwrap_or_default(),
-                tag: tag.clone().unwrap_or_default(),
+                tag: tags.join(","),
             }.into_response()
         }
         Err(e) => {
@@ -93,7 +97,7 @@ pub async fn list_tags(
             TagSidebarTemplate {
                 tags,
                 total_count,
-                active_tag: q.tag.unwrap_or_default(),
+                active_tags: q.tag.map(|t| t.split(',').map(|s| s.trim().to_string()).filter(|s| !s.is_empty()).collect()).unwrap_or_default(),
             }.into_response()
         }
         Err(e) => {

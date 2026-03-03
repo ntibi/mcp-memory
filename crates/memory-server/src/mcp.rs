@@ -57,8 +57,8 @@ struct RecallMemoryParams {
 
 #[derive(Debug, Deserialize, schemars::JsonSchema)]
 struct SearchByTagParams {
-    #[schemars(description = "Exact tag to filter by (case-sensitive). Returns all memories that have this tag.")]
-    tag: String,
+    #[schemars(description = "Tags to filter by (case-sensitive, AND logic). Returns memories that have ALL specified tags.")]
+    tags: Vec<String>,
     #[schemars(description = "Maximum number of results to return (default: 10).")]
     n: Option<usize>,
 }
@@ -102,14 +102,14 @@ impl MemoryMcp {
     }
 
     #[tool(description = "Search memories by exact tag match. Returns all memories tagged with the specified tag, ordered by creation time. Use this when you know the category of information you're looking for rather than searching by content.", annotations(read_only_hint = true, destructive_hint = false, open_world_hint = false))]
-    async fn search_by_tag(
+    async fn search_by_tags(
         &self,
         Parameters(params): Parameters<SearchByTagParams>,
     ) -> Result<String, String> {
         let n = params.n.unwrap_or(10);
         let results = self
             .store
-            .search_by_tag(&params.tag, n)
+            .search_by_tags(&params.tags, n)
             .await
             .map_err(|e| e.to_string())?;
         serde_json::to_string(&results).map_err(|e| e.to_string())
@@ -129,12 +129,12 @@ impl ServerHandler for MemoryMcp {
             },
             instructions: Some(concat!(
                 "Persistent semantic memory for LLM agents. ",
-                "MANDATORY on every session start: call `search_by_tag` with the current project name, then `recall_memory` with a query describing the user's first message. Do this BEFORE any other action. ",
+                "MANDATORY on every session start: call `search_by_tags` with the current project name (pass as a single-element list to `tags`), then `recall_memory` with a query describing the user's first message. Do this BEFORE any other action. ",
                 "Store aggressively: after solving any non-trivial problem, learning a preference, or making an architectural decision, call `store_memory` immediately. Do not wait. ",
                 "Recall often: when encountering a new subtask, bug, or decision point mid-session, call `recall_memory` again with a relevant query. ",
                 "Tag every memory with the project name plus all relevant categories (language, domain, tool, activity, concept, subject, knowledge-type, scope). Aim for at least 3 tags per memory. More tags is always better than fewer. ",
                 "When a request is ambiguous, unclear, or seems to lack context: call `recall_memory` with the confusing parts before asking the user for clarification. Prior memories often contain the missing context. ",
-                "Prefer `recall_memory` for open-ended lookups, `search_by_tag` for known categories. ",
+                "Prefer `recall_memory` for open-ended lookups, `search_by_tags` for known categories. Multiple tags use AND logic — only memories matching ALL specified tags are returned. ",
             ).to_string()),
         }
     }

@@ -68,8 +68,15 @@ async fn list_memories(
     State(state): State<AppState>,
     Query(query): Query<ListQuery>,
 ) -> impl IntoResponse {
+    let tags = query
+        .tag
+        .iter()
+        .flat_map(|t| t.split(','))
+        .map(|t| t.trim().to_string())
+        .filter(|t| !t.is_empty())
+        .collect();
     let filter = ListFilter {
-        tag: query.tag,
+        tags,
         limit: query.limit,
         offset: query.offset,
     };

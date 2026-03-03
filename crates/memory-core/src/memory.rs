@@ -26,7 +26,7 @@ pub struct CreateMemory {
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct ListFilter {
-    pub tag: Option<String>,
+    pub tags: Vec<String>,
     pub limit: Option<usize>,
     pub offset: Option<usize>,
 }
@@ -183,24 +183,11 @@ impl MemoryStore {
     pub async fn list(&self, filter: ListFilter) -> Result<Vec<Memory>> {
         let limit = filter.limit.unwrap_or(50);
         let offset = filter.offset.unwrap_or(0);
-        let tag = filter.tag;
+        let tags = filter.tags;
 
         self.conn
             .call(move |conn| {
-                let ids: Vec<String> = if let Some(ref tag) = tag {
-                    let mut stmt = conn.prepare(
-                        "SELECT DISTINCT m.id FROM memories m \
-                         JOIN memory_tags mt ON m.id = mt.memory_id \
-                         WHERE mt.tag = ?1 \
-                         ORDER BY m.created_at DESC \
-                         LIMIT ?2 OFFSET ?3",
-                    )?;
-                    let rows = stmt.query_map(
-                        rusqlite::params![tag, limit as i64, offset as i64],
-                        |row| row.get(0),
-                    )?;
-                    rows.collect::<std::result::Result<Vec<_>, _>>()?
-                } else {
+                let ids: Vec<String> = if tags.is_empty() {
                     let mut stmt = conn.prepare(
                         "SELECT id FROM memories \
                          ORDER BY created_at DESC \
@@ -210,6 +197,32 @@ impl MemoryStore {
                         rusqlite::params![limit as i64, offset as i64],
                         |row| row.get(0),
                     )?;
+                    rows.collect::<std::result::Result<Vec<_>, _>>()?
+                } else {
+                    let placeholders: Vec<String> = (1..=tags.len()).map(|i| format!("?{i}")).collect();
+                    let tag_count_param = tags.len() + 1;
+                    let limit_param = tags.len() + 2;
+                    let offset_param = tags.len() + 3;
+                    let sql = format!(
+                        "SELECT m.id FROM memories m \
+                         JOIN memory_tags mt ON m.id = mt.memory_id \
+                         WHERE mt.tag IN ({}) \
+                         GROUP BY m.id \
+                         HAVING COUNT(DISTINCT mt.tag) = ?{tag_count_param} \
+                         ORDER BY m.created_at DESC \
+                         LIMIT ?{limit_param} OFFSET ?{offset_param}",
+                        placeholders.join(", ")
+                    );
+                    let mut stmt = conn.prepare(&sql)?;
+                    let mut params: Vec<Box<dyn rusqlite::types::ToSql>> = tags
+                        .iter()
+                        .map(|t| Box::new(t.clone()) as Box<dyn rusqlite::types::ToSql>)
+                        .collect();
+                    params.push(Box::new(tags.len() as i64));
+                    params.push(Box::new(limit as i64));
+                    params.push(Box::new(offset as i64));
+                    let param_refs: Vec<&dyn rusqlite::types::ToSql> = params.iter().map(|p| p.as_ref()).collect();
+                    let rows = stmt.query_map(&*param_refs, |row| row.get(0))?;
                     rows.collect::<std::result::Result<Vec<_>, _>>()?
                 };
 
@@ -481,29 +494,43 @@ impl MemoryStore {
             .map_err(Error::Database)
     }
 
-    pub async fn search_by_tag(&self, tag: &str, limit: usize) -> Result<Vec<Memory>> {
-        let tag = tag.to_string();
+    pub async fn search_by_tags(&self, tags: &[String], limit: usize) -> Result<Vec<Memory>> {
+        if tags.is_empty() {
+            return Ok(vec![]);
+        }
+        let tags = tags.to_vec();
         self.conn
             .call(move |conn| {
-                let mut stmt = conn.prepare(
-                    "SELECT DISTINCT m.id, m.content, m.created_at, m.updated_at \
+                let placeholders: Vec<String> = (1..=tags.len()).map(|i| format!("?{i}")).collect();
+                let tag_count_param = tags.len() + 1;
+                let limit_param = tags.len() + 2;
+                let sql = format!(
+                    "SELECT m.id, m.content, m.created_at, m.updated_at \
                      FROM memories m \
                      JOIN memory_tags mt ON m.id = mt.memory_id \
-                     WHERE mt.tag = ?1 \
+                     WHERE mt.tag IN ({}) \
+                     GROUP BY m.id \
+                     HAVING COUNT(DISTINCT mt.tag) = ?{tag_count_param} \
                      ORDER BY m.created_at DESC \
-                     LIMIT ?2",
-                )?;
-                let rows = stmt.query_map(
-                    rusqlite::params![tag, limit as i64],
-                    |row| {
-                        Ok((
-                            row.get::<_, String>(0)?,
-                            row.get::<_, String>(1)?,
-                            row.get::<_, String>(2)?,
-                            row.get::<_, String>(3)?,
-                        ))
-                    },
-                )?;
+                     LIMIT ?{limit_param}",
+                    placeholders.join(", ")
+                );
+                let mut stmt = conn.prepare(&sql)?;
+                let mut params: Vec<Box<dyn rusqlite::types::ToSql>> = tags
+                    .iter()
+                    .map(|t| Box::new(t.clone()) as Box<dyn rusqlite::types::ToSql>)
+                    .collect();
+                params.push(Box::new(tags.len() as i64));
+                params.push(Box::new(limit as i64));
+                let param_refs: Vec<&dyn rusqlite::types::ToSql> = params.iter().map(|p| p.as_ref()).collect();
+                let rows = stmt.query_map(&*param_refs, |row| {
+                    Ok((
+                        row.get::<_, String>(0)?,
+                        row.get::<_, String>(1)?,
+                        row.get::<_, String>(2)?,
+                        row.get::<_, String>(3)?,
+                    ))
+                })?;
 
                 let raw: Vec<_> = rows.collect::<std::result::Result<Vec<_>, _>>()?;
                 let mut memories = Vec::with_capacity(raw.len());
@@ -775,7 +802,7 @@ mod tests {
 
         let rust_only = store
             .list(ListFilter {
-                tag: Some("rust".into()),
+                tags: vec!["rust".into()],
                 ..Default::default()
             })
             .await
@@ -896,12 +923,16 @@ mod tests {
             .await
             .unwrap();
 
-        let webdev = store.search_by_tag("webdev", 10).await.unwrap();
+        let webdev = store.search_by_tags(&["webdev".into()], 10).await.unwrap();
         assert_eq!(webdev.len(), 2);
 
-        let rust = store.search_by_tag("rust", 10).await.unwrap();
+        let rust = store.search_by_tags(&["rust".into()], 10).await.unwrap();
         assert_eq!(rust.len(), 1);
         assert_eq!(rust[0].content, "rust and webdev");
+
+        let both = store.search_by_tags(&["rust".into(), "webdev".into()], 10).await.unwrap();
+        assert_eq!(both.len(), 1);
+        assert_eq!(both[0].content, "rust and webdev");
     }
 
     #[tokio::test]

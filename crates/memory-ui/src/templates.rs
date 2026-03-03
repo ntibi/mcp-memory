@@ -79,7 +79,7 @@ pub struct VoteButtonsTemplate {
 pub struct TagSidebarTemplate {
     pub tags: Vec<(String, usize)>,
     pub total_count: usize,
-    pub active_tag: String,
+    pub active_tags: Vec<String>,
 }
 
 #[derive(Template, WebTemplate)]
