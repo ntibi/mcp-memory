@@ -103,7 +103,7 @@ impl MemoryMcp {
         &self,
         Parameters(params): Parameters<RecallMemoryParams>,
     ) -> Result<String, String> {
-        let n = params.n.unwrap_or(5);
+        let n = params.n.unwrap_or(20);
         let results = self
             .store
             .recall(
@@ -153,7 +153,7 @@ impl MemoryMcp {
         &self,
         Parameters(params): Parameters<SearchByTagParams>,
     ) -> Result<String, String> {
-        let n = params.n.unwrap_or(10);
+        let n = params.n.unwrap_or(20);
         let results = self
             .store
             .search_by_tags(&params.tags, n)
