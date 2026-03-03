@@ -92,6 +92,7 @@ async fn main() -> anyhow::Result<()> {
         .nest("/ui", memory_ui::router().with_state(ui_state))
         .nest_service("/static", memory_ui::static_service())
         .route("/", axum::routing::get(|| async { axum::response::Redirect::to("/ui") }))
+        .route("/version", axum::routing::get(|| async { option_env!("MEMORY_GIT_SHA").unwrap_or("unknown") }))
         .layer(tower_http::trace::TraceLayer::new_for_http());
 
     let listener = tokio::net::TcpListener::bind(&settings.listen_addr).await?;
