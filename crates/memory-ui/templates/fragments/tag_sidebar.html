@@ -5,7 +5,7 @@
            hx-push-url="/ui"
            onclick="clearTags(this)"
            {% if active_tags.is_empty() %}class="active"{% endif %}>
-        All <span>{{ total_count }}</span>
+        <span class="tag-name">All</span> <span class="tag-count">{{ total_count }}</span>
     </a></li>
     {% for tag in tags %}
     <li><a href="#"
@@ -13,7 +13,7 @@
            hx-target="#card-grid"
            onclick="toggleTag(event, this)"
            {% if active_tags.contains(&tag.0) %}class="active"{% endif %}>
-        {{ tag.0 }} <span>{{ tag.1 }}</span>
+        <span class="tag-name">{{ tag.0 }}</span> <span class="tag-count">{{ tag.1 }}</span>
     </a></li>
     {% endfor %}
 </ul>

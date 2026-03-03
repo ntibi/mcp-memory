@@ -209,12 +209,18 @@ header {
     font-size: 0.8125rem;
     color: var(--text-secondary);
     transition: all 0.15s ease;
-    overflow: hidden;
     white-space: nowrap;
     gap: 0.5rem;
+    overflow: hidden;
 }
 
-.sidebar li a span {
+.sidebar li a .tag-name {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    min-width: 0;
+}
+
+.sidebar li a .tag-count {
     font-size: 0.7rem;
     color: var(--text-muted);
     background: var(--border-light);
@@ -236,7 +242,7 @@ header {
     font-weight: 600;
 }
 
-.sidebar li a.active span {
+.sidebar li a.active .tag-count {
     background: var(--accent);
     color: white;
 }
