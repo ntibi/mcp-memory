@@ -56,6 +56,22 @@ struct RecallMemoryParams {
 }
 
 #[derive(Debug, Deserialize, schemars::JsonSchema)]
+struct UpdateMemoryParams {
+    #[schemars(description = "The ID of the memory to update.")]
+    id: String,
+    #[schemars(description = "The new content for the memory. The embedding will be recomputed.")]
+    content: String,
+    #[schemars(description = "Optional new tags to replace the existing tags. If not provided, tags are left unchanged.")]
+    tags: Option<Vec<String>>,
+}
+
+#[derive(Debug, Deserialize, schemars::JsonSchema)]
+struct DeleteMemoryParams {
+    #[schemars(description = "The ID of the memory to delete.")]
+    id: String,
+}
+
+#[derive(Debug, Deserialize, schemars::JsonSchema)]
 struct SearchByTagParams {
     #[schemars(description = "Tags to filter by (case-sensitive, AND logic). Returns memories that have ALL specified tags.")]
     tags: Vec<String>,
@@ -101,6 +117,37 @@ impl MemoryMcp {
         serde_json::to_string(&results).map_err(|e| e.to_string())
     }
 
+    #[tool(description = "Update an existing memory's content and optionally its tags. The embedding is recomputed from the new content. Use this when a memory is outdated or partially wrong but the core topic is the same.", annotations(read_only_hint = false, destructive_hint = false, idempotent_hint = true, open_world_hint = false))]
+    async fn update_memory(
+        &self,
+        Parameters(params): Parameters<UpdateMemoryParams>,
+    ) -> Result<String, String> {
+        let memory = self
+            .store
+            .update(&params.id, &params.content, self.embedder.as_ref())
+            .await
+            .map_err(|e| e.to_string())?;
+        if let Some(tags) = params.tags {
+            self.store
+                .set_tags(&params.id, tags)
+                .await
+                .map_err(|e| e.to_string())?;
+        }
+        serde_json::to_string(&memory).map_err(|e| e.to_string())
+    }
+
+    #[tool(description = "Delete a memory by ID. Use this when a memory is completely wrong or superseded. This is irreversible.", annotations(read_only_hint = false, destructive_hint = true, idempotent_hint = true, open_world_hint = false))]
+    async fn delete_memory(
+        &self,
+        Parameters(params): Parameters<DeleteMemoryParams>,
+    ) -> Result<String, String> {
+        self.store
+            .delete(&params.id)
+            .await
+            .map_err(|e| e.to_string())?;
+        Ok(format!("deleted memory {}", params.id))
+    }
+
     #[tool(description = "Search memories by exact tag match. Returns all memories tagged with the specified tag, ordered by creation time. Use this when you know the category of information you're looking for rather than searching by content.", annotations(read_only_hint = true, destructive_hint = false, open_world_hint = false))]
     async fn search_by_tags(
         &self,
@@ -130,7 +177,7 @@ impl ServerHandler for MemoryMcp {
             instructions: Some(concat!(
                 "Persistent semantic memory for LLM agents. ",
                 "MANDATORY on every session start: call `search_by_tags` with the current project name (pass as a single-element list to `tags`), then `recall_memory` with a query describing the user's first message. Do this BEFORE any other action. ",
-                "Store aggressively: after solving any non-trivial problem, learning a preference, or making an architectural decision, call `store_memory` immediately. Do not wait. ",
+                "Store aggressively: after solving any non-trivial problem, learning a preference, or making an architectural decision, call `store_memory` immediately. Do not wait. Use `update_memory` to fix outdated memories, `delete_memory` to remove wrong or superseded ones. ",
                 "Recall often: when encountering a new subtask, bug, or decision point mid-session, call `recall_memory` again with a relevant query. ",
                 "Tag every memory with the project name plus all relevant categories (language, domain, tool, activity, concept, subject, knowledge-type, scope). Aim for at least 3 tags per memory. More tags is always better than fewer. ",
                 "When a request is ambiguous, unclear, or seems to lack context: call `recall_memory` with the confusing parts before asking the user for clarification. Prior memories often contain the missing context. ",
