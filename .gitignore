@@ -5,3 +5,4 @@ target/
 memory.db
 memory.db-shm
 memory.db-wal
+.worktrees/
