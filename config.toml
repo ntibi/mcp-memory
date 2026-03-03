@@ -24,6 +24,8 @@ model = "all-MiniLM-L6-v2"
 relevance_weight = 0.6
 confidence_weight = 0.25
 recency_weight = 0.15
+# Half-life in days for recency exponential decay
+recency_half_life_days = 30.0
 
 [curation]
 # Interval in seconds between curation runs

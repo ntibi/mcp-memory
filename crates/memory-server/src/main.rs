@@ -49,6 +49,7 @@ async fn main() -> anyhow::Result<()> {
             relevance_weight: settings.scoring.relevance_weight,
             confidence_weight: settings.scoring.confidence_weight,
             recency_weight: settings.scoring.recency_weight,
+            recency_half_life_days: settings.scoring.recency_half_life_days,
         },
     ));
 

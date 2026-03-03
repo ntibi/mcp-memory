@@ -26,6 +26,7 @@ pub struct ScoringConfig {
     pub relevance_weight: f64,
     pub confidence_weight: f64,
     pub recency_weight: f64,
+    pub recency_half_life_days: f64,
 }
 
 #[derive(Debug, Deserialize, Clone)]
@@ -65,6 +66,7 @@ impl Settings {
             .set_default("scoring.relevance_weight", 0.6)?
             .set_default("scoring.confidence_weight", 0.25)?
             .set_default("scoring.recency_weight", 0.15)?
+            .set_default("scoring.recency_half_life_days", 30.0)?
             .set_default("curation.interval_secs", 3600)?
             .set_default("curation.similarity_threshold", 0.85)?
             .add_source(File::with_name(&cli.config).required(false))
@@ -109,6 +111,7 @@ mod tests {
         assert!((settings.scoring.relevance_weight - 0.6).abs() < f64::EPSILON);
         assert!((settings.scoring.confidence_weight - 0.25).abs() < f64::EPSILON);
         assert!((settings.scoring.recency_weight - 0.15).abs() < f64::EPSILON);
+        assert!((settings.scoring.recency_half_life_days - 30.0).abs() < f64::EPSILON);
         assert_eq!(settings.curation.interval_secs, 3600);
         assert!((settings.curation.similarity_threshold - 0.85).abs() < f64::EPSILON);
         assert!(settings.curation.llm.is_none());
