@@ -11,7 +11,46 @@ use rmcp::{
     model::*,
     tool, tool_handler, tool_router,
 };
-use serde::{Deserialize, Serialize};
+use serde::{Deserialize, Deserializer, Serialize};
+
+fn string_or_seq<'de, D>(deserializer: D) -> Result<Vec<String>, D::Error>
+where
+    D: Deserializer<'de>,
+{
+    #[derive(Deserialize)]
+    #[serde(untagged)]
+    enum StringOrSeq {
+        Seq(Vec<String>),
+        Str(String),
+    }
+
+    match StringOrSeq::deserialize(deserializer)? {
+        StringOrSeq::Seq(v) => Ok(v),
+        StringOrSeq::Str(s) => serde_json::from_str(&s).map_err(serde::de::Error::custom),
+    }
+}
+
+fn option_string_or_seq<'de, D>(deserializer: D) -> Result<Option<Vec<String>>, D::Error>
+where
+    D: Deserializer<'de>,
+{
+    #[derive(Deserialize)]
+    #[serde(untagged)]
+    enum OptStringOrSeq {
+        Seq(Vec<String>),
+        Str(String),
+        Null,
+    }
+
+    match Option::<OptStringOrSeq>::deserialize(deserializer)? {
+        None => Ok(None),
+        Some(OptStringOrSeq::Seq(v)) => Ok(Some(v)),
+        Some(OptStringOrSeq::Str(s)) => {
+            serde_json::from_str(&s).map(Some).map_err(serde::de::Error::custom)
+        }
+        Some(OptStringOrSeq::Null) => Ok(None),
+    }
+}
 
 #[derive(Clone)]
 pub struct MemoryMcp {
@@ -43,6 +82,7 @@ type ToolRouter<S> = rmcp::handler::server::router::tool::ToolRouter<S>;
 struct StoreMemoryParams {
     #[schemars(description = "The content to store as a memory. Can be a fact, note, preference, decision, code pattern, or any information worth remembering across conversations.")]
     content: String,
+    #[serde(deserialize_with = "string_or_seq")]
     #[schemars(description = "Tags to categorize the memory across multiple dimensions. Include ALL that apply: project name, language (rust, python), domain (networking, auth), activity (debugging, deployment, testing), tool (docker, git, postgres), subject (user-preference, workflow, team-convention, machine-setup), knowledge type (gotcha, pattern, decision, workaround, preference), source context (code-review, debugging-session, documentation), tool/MCP context (claude-code, slack, github, terminal), scope (universal, project-specific, machine-specific). Prefer lowercase, singular, hyphenated. More tags is always better — they cost nothing and improve retrieval. Aim for at least 3 tags per memory.")]
     tags: Vec<String>,
 }
@@ -57,6 +97,7 @@ struct RecallMemoryParams {
 
 #[derive(Debug, Deserialize, schemars::JsonSchema)]
 struct SessionStartParams {
+    #[serde(deserialize_with = "string_or_seq")]
     #[schemars(description = "Tags to search for (e.g. [\"project:memory\"]). Also automatically includes memories tagged \"universal\".")]
     tags: Vec<String>,
     #[schemars(description = "Natural language description of the current task or user's first message, used for semantic recall.")]
@@ -71,6 +112,7 @@ struct UpdateMemoryParams {
     id: String,
     #[schemars(description = "The new content for the memory. The embedding will be recomputed.")]
     content: String,
+    #[serde(default, deserialize_with = "option_string_or_seq")]
     #[schemars(description = "Optional new tags to replace the existing tags. If not provided, tags are left unchanged.")]
     tags: Option<Vec<String>>,
 }
@@ -83,6 +125,7 @@ struct DeleteMemoryParams {
 
 #[derive(Debug, Deserialize, schemars::JsonSchema)]
 struct SearchByTagParams {
+    #[serde(deserialize_with = "string_or_seq")]
     #[schemars(description = "Tags to filter by (case-sensitive, AND logic). Returns memories that have ALL specified tags.")]
     tags: Vec<String>,
     #[schemars(description = "Maximum number of results to return (default: 20).")]
