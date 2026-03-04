@@ -57,8 +57,8 @@ struct RecallMemoryParams {
 
 #[derive(Debug, Deserialize, schemars::JsonSchema)]
 struct SessionStartParams {
-    #[schemars(description = "Project tags to search for (e.g. [\"project:memory\"]). Also automatically includes memories tagged \"universal\".")]
-    project_tags: Vec<String>,
+    #[schemars(description = "Tags to search for (e.g. [\"project:memory\"]). Also automatically includes memories tagged \"universal\".")]
+    tags: Vec<String>,
     #[schemars(description = "Natural language description of the current task or user's first message, used for semantic recall.")]
     task: String,
     #[schemars(description = "Maximum total memories to return (default: 40).")]
@@ -129,11 +129,11 @@ impl MemoryMcp {
         let n = params.n.unwrap_or(40);
         let half = n / 2;
 
-        let by_tags = if params.project_tags.is_empty() {
+        let by_tags = if params.tags.is_empty() {
             vec![]
         } else {
             self.store
-                .search_by_tags(&params.project_tags, half)
+                .search_by_tags(&params.tags, half)
                 .await
                 .unwrap_or_default()
         };
@@ -243,7 +243,7 @@ impl ServerHandler for MemoryMcp {
             },
             instructions: Some(concat!(
                 "Persistent semantic memory for LLM agents. ",
-                "MANDATORY on every session start: call `session_start` with the project tags (e.g. [\"project:memory\"]) and a description of the user's task. Do this BEFORE any other action. ",
+                "MANDATORY on every session start: call `session_start` with tags (e.g. [\"project:memory\"]) and a description of the user's task. Do this BEFORE any other action. ",
                 "Store aggressively: after solving any non-trivial problem, learning a preference, or making an architectural decision, call `store_memory` immediately. Do not wait. `store_memory` returns related existing memories — read them. Use `update_memory` to fix outdated memories, `delete_memory` to remove wrong or superseded ones. ",
                 "Recall mid-session: call `recall_memory` whenever you are about to make a decision, encounter something unfamiliar, or context-switch to a different part of the codebase. If you are unsure whether to recall, recall. ",
                 "Tag every memory with `project:<name>` (e.g. `project:memory`) plus all relevant categories (language, domain, tool, activity, concept, subject, knowledge-type, scope). Aim for at least 3 tags per memory. More tags is always better than fewer. Tag with `universal` for memories that apply across all projects (e.g. user preferences, workflow conventions, machine setup). `session_start` automatically includes `universal` memories. ",
