@@ -90,7 +90,11 @@ async fn main() -> anyhow::Result<()> {
         Arc::new(StreamableHttpService::new(
             move || Ok(mcp::MemoryMcp::new(store.clone(), embedder.clone(), scorer.clone())),
             Arc::new(LocalSessionManager::default()),
-            StreamableHttpServerConfig::default(),
+            StreamableHttpServerConfig {
+                stateful_mode: false,
+                json_response: true,
+                ..Default::default()
+            },
         ))
     };
 
@@ -116,8 +120,6 @@ async fn main() -> anyhow::Result<()> {
         .route(
             "/mcp",
             axum::routing::post(mcp_handler)
-                .get(mcp_handler)
-                .delete(mcp_handler)
                 .with_state(mcp_service),
         )
         .nest("/api/v1", api::router().with_state(app_state))
