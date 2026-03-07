@@ -42,11 +42,7 @@ pub async fn list_memories(
     let limit = 20;
     let offset = q.cursor.as_deref().and_then(|c| c.parse::<usize>().ok()).unwrap_or(0);
     let is_semantic = q.q.as_ref().is_some_and(|s| !s.is_empty());
-    let tags: Vec<String> = q.tag.iter()
-        .flat_map(|t| t.split(','))
-        .map(|t| t.trim().to_string())
-        .filter(|t| !t.is_empty())
-        .collect();
+    let tags = q.tag.as_deref().map(memory_core::tags::parse_comma_separated).unwrap_or_default();
 
     let memories = if let Some(ref query) = q.q {
         if query.is_empty() {
@@ -74,11 +70,12 @@ pub async fn list_memories(
             let has_more = !is_semantic && mems.len() > limit;
             mems.truncate(limit);
 
-            let mut cards = Vec::new();
-            for m in mems {
-                let (helpful, harmful) = state.store.get_vote_counts(&m.id).await.unwrap_or((0, 0));
-                cards.push(MemoryCard::from_memory(m, helpful, harmful));
-            }
+            let ids: Vec<String> = mems.iter().map(|m| m.id.clone()).collect();
+            let votes = state.store.get_vote_counts_batch(&ids).await.unwrap_or_default();
+            let cards: Vec<MemoryCard> = mems.into_iter().map(|m| {
+                let (helpful, harmful) = votes.get(&m.id).copied().unwrap_or((0, 0));
+                MemoryCard::from_memory(m, helpful, harmful)
+            }).collect();
 
             let next_cursor = (offset + cards.len()).to_string();
 
@@ -108,7 +105,7 @@ pub async fn list_tags(
             TagSidebarTemplate {
                 tags,
                 total_count,
-                active_tags: q.tag.map(|t| t.split(',').map(|s| s.trim().to_string()).filter(|s| !s.is_empty()).collect()).unwrap_or_default(),
+                active_tags: q.tag.as_deref().map(memory_core::tags::parse_comma_separated).unwrap_or_default(),
             }.into_response()
         }
         Err(e) => {
@@ -188,12 +185,8 @@ pub async fn update_memory(
         return StatusCode::INTERNAL_SERVER_ERROR.into_response();
     }
 
-    if let Some(tags_str) = form.tags {
-        let tags: Vec<String> = tags_str
-            .split(',')
-            .map(|s| s.trim().to_string())
-            .filter(|s| !s.is_empty())
-            .collect();
+    if let Some(ref tags_str) = form.tags {
+        let tags = memory_core::tags::parse_comma_separated(tags_str);
         let _ = state.store.set_tags(&auth.user_id, &id, tags).await;
     }
 

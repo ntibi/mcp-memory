@@ -1,8 +1,8 @@
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 
 const Z: f64 = 1.96; // 95% confidence interval
 
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ScoringConfig {
     pub relevance_weight: f64,
     pub confidence_weight: f64,
@@ -28,6 +28,10 @@ pub struct Scorer {
 impl Scorer {
     pub fn new(config: ScoringConfig) -> Self {
         Self { config }
+    }
+
+    pub fn wilson_score(&self, helpful: u64, harmful: u64) -> f64 {
+        wilson_score(helpful, harmful)
     }
 
     pub fn score(&self, relevance: f64, helpful: u64, harmful: u64, age_days: f64) -> f64 {

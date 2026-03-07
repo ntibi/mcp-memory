@@ -73,11 +73,9 @@ async fn list_memories(
 ) -> impl IntoResponse {
     let tags = query
         .tag
-        .iter()
-        .flat_map(|t| t.split(','))
-        .map(|t| t.trim().to_string())
-        .filter(|t| !t.is_empty())
-        .collect();
+        .as_deref()
+        .map(memory_core::tags::parse_comma_separated)
+        .unwrap_or_default();
     let filter = ListFilter {
         tags,
         limit: query.limit,
@@ -235,7 +233,7 @@ async fn health() -> impl IntoResponse {
     Json(json!({"status": "ok"}))
 }
 
-fn error_response(err: &Error) -> axum::response::Response {
+pub fn error_response(err: &Error) -> axum::response::Response {
     let (status, message) = match err {
         Error::NotFound(msg) => (StatusCode::NOT_FOUND, msg.clone()),
         Error::InvalidInput(msg) => (StatusCode::BAD_REQUEST, msg.clone()),

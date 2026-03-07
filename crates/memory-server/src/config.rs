@@ -21,13 +21,7 @@ pub struct EmbeddingConfig {
     pub dimension: Option<usize>,
 }
 
-#[derive(Debug, Deserialize, Clone)]
-pub struct ScoringConfig {
-    pub relevance_weight: f64,
-    pub confidence_weight: f64,
-    pub recency_weight: f64,
-    pub recency_half_life_days: f64,
-}
+pub use memory_core::scoring::ScoringConfig;
 
 #[derive(Debug, Deserialize, Clone)]
 pub struct CurationConfig {

@@ -163,34 +163,22 @@ impl MemoryStore {
                     )?;
                     rows.collect::<std::result::Result<Vec<_>, _>>()?
                 } else {
-                    let mut param_idx = 1;
-                    let user_id_param = param_idx;
-                    param_idx += 1;
-                    let tag_start = param_idx;
-                    let placeholders: Vec<String> = (tag_start..tag_start + tags.len()).map(|i| format!("?{i}")).collect();
-                    param_idx += tags.len();
-                    let tag_count_param = param_idx;
-                    param_idx += 1;
-                    let limit_param = param_idx;
-                    param_idx += 1;
-                    let offset_param = param_idx;
+                    let tq = build_tag_query(&tags, 2);
+                    let limit_param = tq.next_param_idx;
+                    let offset_param = limit_param + 1;
                     let sql = format!(
                         "SELECT m.id FROM memories m \
                          JOIN memory_tags mt ON m.id = mt.memory_id \
-                         WHERE m.user_id = ?{user_id_param} AND mt.tag IN ({}) \
-                         GROUP BY m.id \
-                         HAVING COUNT(DISTINCT mt.tag) = ?{tag_count_param} \
+                         WHERE m.user_id = ?1 AND {} \
+                         GROUP BY m.id {} \
                          ORDER BY m.created_at DESC \
                          LIMIT ?{limit_param} OFFSET ?{offset_param}",
-                        placeholders.join(", ")
+                        tq.where_clause, tq.having_clause
                     );
                     let mut stmt = conn.prepare(&sql)?;
                     let mut params: Vec<Box<dyn rusqlite::types::ToSql>> = Vec::new();
                     params.push(Box::new(user_id.clone()));
-                    for t in &tags {
-                        params.push(Box::new(t.clone()));
-                    }
-                    params.push(Box::new(tags.len() as i64));
+                    params.extend(tq.params);
                     params.push(Box::new(limit as i64));
                     params.push(Box::new(offset as i64));
                     let param_refs: Vec<&dyn rusqlite::types::ToSql> = params.iter().map(|p| p.as_ref()).collect();
@@ -423,6 +411,17 @@ impl MemoryStore {
             .map_err(Error::Database)
     }
 
+    pub async fn get_vote_counts_batch(&self, memory_ids: &[String]) -> Result<HashMap<String, (u64, u64)>> {
+        let ids = memory_ids.to_vec();
+        self.conn
+            .call(move |conn| {
+                let id_refs: Vec<&str> = ids.iter().map(|s| s.as_str()).collect();
+                Ok(load_vote_counts_batch(conn, &id_refs)?)
+            })
+            .await
+            .map_err(Error::Database)
+    }
+
     pub async fn search_by_tags(&self, user_id: &str, tags: &[String], limit: usize) -> Result<Vec<Memory>> {
         if tags.is_empty() {
             return Ok(vec![]);
@@ -431,37 +430,24 @@ impl MemoryStore {
         let user_id = user_id.to_string();
         self.conn
             .call(move |conn| {
-                let mut param_idx = 1;
-                let user_id_param = param_idx;
-                param_idx += 1;
-                let tag_start = param_idx;
-                let placeholders: Vec<String> = (tag_start..tag_start + tags.len()).map(|i| format!("?{i}")).collect();
-                param_idx += tags.len();
-                let tag_count_param = param_idx;
-                param_idx += 1;
-                let limit_param = param_idx;
+                let tq = build_tag_query(&tags, 2);
+                let limit_param = tq.next_param_idx;
                 let sql = format!(
-                    "SELECT m.id \
-                     FROM memories m \
+                    "SELECT m.id FROM memories m \
                      JOIN memory_tags mt ON m.id = mt.memory_id \
-                     WHERE m.user_id = ?{user_id_param} AND mt.tag IN ({}) \
-                     GROUP BY m.id \
-                     HAVING COUNT(DISTINCT mt.tag) = ?{tag_count_param} \
+                     WHERE m.user_id = ?1 AND {} \
+                     GROUP BY m.id {} \
                      ORDER BY m.created_at DESC \
                      LIMIT ?{limit_param}",
-                    placeholders.join(", ")
+                    tq.where_clause, tq.having_clause
                 );
                 let mut stmt = conn.prepare(&sql)?;
                 let mut params: Vec<Box<dyn rusqlite::types::ToSql>> = Vec::new();
                 params.push(Box::new(user_id.clone()));
-                for t in &tags {
-                    params.push(Box::new(t.clone()));
-                }
-                params.push(Box::new(tags.len() as i64));
+                params.extend(tq.params);
                 params.push(Box::new(limit as i64));
                 let param_refs: Vec<&dyn rusqlite::types::ToSql> = params.iter().map(|p| p.as_ref()).collect();
                 let rows = stmt.query_map(&*param_refs, |row| row.get::<_, String>(0))?;
-
                 let ids: Vec<String> = rows.collect::<std::result::Result<Vec<_>, _>>()?;
                 let memories: Vec<Memory> = ids.iter().map(|id| load_memory(conn, id)).collect::<std::result::Result<Vec<_>, _>>()?;
                 Ok(memories)
@@ -481,8 +467,10 @@ impl MemoryStore {
         let query_embedding = embedder.embed(query)?;
         let query_bytes: Vec<u8> = query_embedding.as_bytes().to_vec();
         let fetch_limit = n * 3;
+        let user_id = user_id.to_string();
+        let now = Utc::now();
 
-        let candidates: Vec<(String, f64)> = self
+        let raw_results: Vec<(Memory, u64, u64, f64)> = self
             .conn
             .call(move |conn| {
                 let mut stmt = conn.prepare(
@@ -492,66 +480,75 @@ impl MemoryStore {
                      ORDER BY distance \
                      LIMIT ?2",
                 )?;
-                let rows = stmt.query_map(
-                    rusqlite::params![query_bytes, fetch_limit as i64],
-                    |row| {
-                        Ok((row.get::<_, String>(0)?, row.get::<_, f64>(1)?))
-                    },
-                )?;
-                rows.collect::<std::result::Result<Vec<_>, _>>()
-                    .map_err(|e| e.into())
-            })
-            .await
-            .map_err(Error::Database)?;
+                let candidates: Vec<(String, f64)> = stmt
+                    .query_map(
+                        rusqlite::params![query_bytes, fetch_limit as i64],
+                        |row| Ok((row.get::<_, String>(0)?, row.get::<_, f64>(1)?)),
+                    )?
+                    .collect::<std::result::Result<Vec<_>, _>>()?;
+                drop(stmt);
 
-        let distance_map: HashMap<String, f64> = candidates.iter().cloned().collect();
-        let memory_ids: Vec<String> = candidates.into_iter().map(|(id, _)| id).collect();
+                if candidates.is_empty() {
+                    return Ok(vec![]);
+                }
 
-        let now = Utc::now();
-        let ids_for_db = memory_ids.clone();
-        let user_id = user_id.to_string();
+                let distance_map: HashMap<String, f64> = candidates.iter().cloned().collect();
+                let candidate_ids: Vec<String> =
+                    candidates.into_iter().map(|(id, _)| id).collect();
 
-        let memory_data: Vec<(Memory, u64, u64)> = self
-            .conn
-            .call(move |conn| {
-                let mut results = Vec::new();
-                for id in &ids_for_db {
-                    let mut stmt = conn.prepare(
-                        "SELECT user_id, content, created_at, updated_at FROM memories WHERE id = ?1 AND user_id = ?2",
+                let placeholders: Vec<String> =
+                    (1..=candidate_ids.len()).map(|i| format!("?{i}")).collect();
+                let user_param = candidate_ids.len() + 1;
+                let sql = format!(
+                    "SELECT id, user_id, content, created_at, updated_at FROM memories \
+                     WHERE id IN ({}) AND user_id = ?{user_param}",
+                    placeholders.join(", ")
+                );
+                let mut mem_stmt = conn.prepare(&sql)?;
+                let mut params: Vec<Box<dyn rusqlite::types::ToSql>> = candidate_ids
+                    .iter()
+                    .map(|id| Box::new(id.clone()) as Box<dyn rusqlite::types::ToSql>)
+                    .collect();
+                params.push(Box::new(user_id.clone()));
+                let param_refs: Vec<&dyn rusqlite::types::ToSql> =
+                    params.iter().map(|p| p.as_ref()).collect();
+                let rows = mem_stmt.query_map(&*param_refs, |row| {
+                    Ok((
+                        row.get::<_, String>(0)?,
+                        row.get::<_, String>(1)?,
+                        row.get::<_, String>(2)?,
+                        row.get::<_, String>(3)?,
+                        row.get::<_, String>(4)?,
+                    ))
+                })?;
+                let raw: Vec<_> = rows.collect::<std::result::Result<Vec<_>, _>>()?;
+                drop(mem_stmt);
+
+                let matched_ids: Vec<&str> = raw.iter().map(|(id, ..)| id.as_str()).collect();
+                let tags_map = load_tags_batch(conn, &matched_ids)?;
+                let votes_map = load_vote_counts_batch(conn, &matched_ids)?;
+
+                let accessed_at = Utc::now().to_rfc3339();
+                for id in &matched_ids {
+                    conn.execute(
+                        "INSERT INTO memory_access_log (memory_id, accessed_at) VALUES (?1, ?2)",
+                        rusqlite::params![id, accessed_at],
                     )?;
-                    let row = stmt.query_row(rusqlite::params![id, user_id], |row| {
-                        Ok((
-                            row.get::<_, String>(0)?,
-                            row.get::<_, String>(1)?,
-                            row.get::<_, String>(2)?,
-                            row.get::<_, String>(3)?,
-                        ))
-                    });
+                }
 
-                    let (mem_user_id, content, created_at_str, updated_at_str) = match row {
-                        Ok(r) => r,
-                        Err(_) => continue,
-                    };
-
-                    let tags = load_tags(conn, id)?;
-
+                let mut results = Vec::new();
+                for (id, mem_user_id, content, created_at_str, updated_at_str) in raw {
+                    let tags = tags_map.get(&id).cloned().unwrap_or_default();
                     let created_at = parse_datetime(&created_at_str)?;
                     let updated_at = parse_datetime(&updated_at_str)?;
-
-                    let helpful: u64 = conn.query_row(
-                        "SELECT COUNT(*) FROM memory_votes WHERE memory_id = ?1 AND vote = 'helpful'",
-                        rusqlite::params![id],
-                        |row| row.get(0),
-                    )?;
-                    let harmful: u64 = conn.query_row(
-                        "SELECT COUNT(*) FROM memory_votes WHERE memory_id = ?1 AND vote = 'harmful'",
-                        rusqlite::params![id],
-                        |row| row.get(0),
-                    )?;
-
+                    let (helpful, harmful) = votes_map.get(&id).copied().unwrap_or((0, 0));
+                    let distance = match distance_map.get(&id) {
+                        Some(d) => *d,
+                        None => continue,
+                    };
                     results.push((
                         Memory {
-                            id: id.clone(),
+                            id,
                             user_id: mem_user_id,
                             content,
                             created_at,
@@ -560,6 +557,7 @@ impl MemoryStore {
                         },
                         helpful,
                         harmful,
+                        distance,
                     ));
                 }
                 Ok(results)
@@ -567,45 +565,24 @@ impl MemoryStore {
             .await
             .map_err(Error::Database)?;
 
-        let mut scored: Vec<ScoredMemory> = memory_data
+        let mut scored: Vec<ScoredMemory> = raw_results
             .into_iter()
-            .filter_map(|(memory, helpful, harmful)| {
-                let distance = *distance_map.get(&memory.id)?;
+            .map(|(memory, helpful, harmful, distance)| {
                 let relevance = 1.0 - distance;
                 let age_days = (now - memory.created_at).num_seconds() as f64 / 86400.0;
-                let confidence = if helpful + harmful == 0 {
-                    0.5
-                } else {
-                    (helpful as f64) / ((helpful + harmful) as f64)
-                };
+                let confidence = scorer.wilson_score(helpful, harmful);
                 let score = scorer.score(relevance, helpful, harmful, age_days);
-                Some(ScoredMemory {
+                ScoredMemory {
                     memory,
                     relevance,
                     confidence,
                     score,
-                })
+                }
             })
             .collect();
 
         scored.sort_by(|a, b| b.score.partial_cmp(&a.score).unwrap_or(std::cmp::Ordering::Equal));
         scored.truncate(n);
-
-        let returned_ids: Vec<String> = scored.iter().map(|s| s.memory.id.clone()).collect();
-        self.conn
-            .call(move |conn| {
-                let accessed_at = Utc::now().to_rfc3339();
-                for id in &returned_ids {
-                    conn.execute(
-                        "INSERT INTO memory_access_log (memory_id, accessed_at) VALUES (?1, ?2)",
-                        rusqlite::params![id, accessed_at],
-                    )?;
-                }
-                Ok(())
-            })
-            .await
-            .map_err(Error::Database)?;
-
         Ok(scored)
     }
 
@@ -675,26 +652,20 @@ impl MemoryStore {
                     )?;
                     rows.collect::<std::result::Result<Vec<_>, _>>()?
                 } else {
-                    let placeholders: Vec<String> = (1..=tags.len()).map(|i| format!("?{i}")).collect();
-                    let tag_count_param = tags.len() + 1;
-                    let limit_param = tags.len() + 2;
-                    let offset_param = tags.len() + 3;
+                    let tq = build_tag_query(&tags, 1);
+                    let limit_param = tq.next_param_idx;
+                    let offset_param = limit_param + 1;
                     let sql = format!(
                         "SELECT m.id FROM memories m \
                          JOIN memory_tags mt ON m.id = mt.memory_id \
-                         WHERE mt.tag IN ({}) \
-                         GROUP BY m.id \
-                         HAVING COUNT(DISTINCT mt.tag) = ?{tag_count_param} \
+                         WHERE {} \
+                         GROUP BY m.id {} \
                          ORDER BY m.created_at DESC \
                          LIMIT ?{limit_param} OFFSET ?{offset_param}",
-                        placeholders.join(", ")
+                        tq.where_clause, tq.having_clause
                     );
                     let mut stmt = conn.prepare(&sql)?;
-                    let mut params: Vec<Box<dyn rusqlite::types::ToSql>> = tags
-                        .iter()
-                        .map(|t| Box::new(t.clone()) as Box<dyn rusqlite::types::ToSql>)
-                        .collect();
-                    params.push(Box::new(tags.len() as i64));
+                    let mut params = tq.params;
                     params.push(Box::new(limit as i64));
                     params.push(Box::new(offset as i64));
                     let param_refs: Vec<&dyn rusqlite::types::ToSql> = params.iter().map(|p| p.as_ref()).collect();
@@ -759,6 +730,99 @@ fn load_memory(conn: &rusqlite::Connection, id: &str) -> rusqlite::Result<Memory
 
 fn load_memories(conn: &rusqlite::Connection, ids: &[String]) -> rusqlite::Result<Vec<Memory>> {
     ids.iter().map(|id| load_memory(conn, id)).collect()
+}
+
+fn load_tags_batch(
+    conn: &rusqlite::Connection,
+    memory_ids: &[&str],
+) -> rusqlite::Result<HashMap<String, Vec<String>>> {
+    if memory_ids.is_empty() {
+        return Ok(HashMap::new());
+    }
+    let placeholders: Vec<String> = (1..=memory_ids.len()).map(|i| format!("?{i}")).collect();
+    let sql = format!(
+        "SELECT memory_id, tag FROM memory_tags WHERE memory_id IN ({}) ORDER BY tag",
+        placeholders.join(", ")
+    );
+    let mut stmt = conn.prepare(&sql)?;
+    let params: Vec<&dyn rusqlite::types::ToSql> = memory_ids
+        .iter()
+        .map(|id| id as &dyn rusqlite::types::ToSql)
+        .collect();
+    let rows = stmt.query_map(&*params, |row| {
+        Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?))
+    })?;
+    let mut map: HashMap<String, Vec<String>> = HashMap::new();
+    for row in rows {
+        let (id, tag) = row?;
+        map.entry(id).or_default().push(tag);
+    }
+    Ok(map)
+}
+
+fn load_vote_counts_batch(
+    conn: &rusqlite::Connection,
+    memory_ids: &[&str],
+) -> rusqlite::Result<HashMap<String, (u64, u64)>> {
+    if memory_ids.is_empty() {
+        return Ok(HashMap::new());
+    }
+    let placeholders: Vec<String> = (1..=memory_ids.len()).map(|i| format!("?{i}")).collect();
+    let sql = format!(
+        "SELECT memory_id, vote, COUNT(*) FROM memory_votes \
+         WHERE memory_id IN ({}) GROUP BY memory_id, vote",
+        placeholders.join(", ")
+    );
+    let mut stmt = conn.prepare(&sql)?;
+    let params: Vec<&dyn rusqlite::types::ToSql> = memory_ids
+        .iter()
+        .map(|id| id as &dyn rusqlite::types::ToSql)
+        .collect();
+    let rows = stmt.query_map(&*params, |row| {
+        Ok((
+            row.get::<_, String>(0)?,
+            row.get::<_, String>(1)?,
+            row.get::<_, u64>(2)?,
+        ))
+    })?;
+    let mut map: HashMap<String, (u64, u64)> = HashMap::new();
+    for row in rows {
+        let (id, vote, count) = row?;
+        let entry = map.entry(id).or_insert((0, 0));
+        match vote.as_str() {
+            "helpful" => entry.0 = count,
+            "harmful" => entry.1 = count,
+            _ => {}
+        }
+    }
+    Ok(map)
+}
+
+struct TagQuery {
+    where_clause: String,
+    having_clause: String,
+    params: Vec<Box<dyn rusqlite::types::ToSql>>,
+    next_param_idx: usize,
+}
+
+fn build_tag_query(tags: &[String], first_param_idx: usize) -> TagQuery {
+    let placeholders: Vec<String> = (first_param_idx..first_param_idx + tags.len())
+        .map(|i| format!("?{i}"))
+        .collect();
+    let count_param = first_param_idx + tags.len();
+    let where_clause = format!("mt.tag IN ({})", placeholders.join(", "));
+    let having_clause = format!("HAVING COUNT(DISTINCT mt.tag) = ?{count_param}");
+    let mut params: Vec<Box<dyn rusqlite::types::ToSql>> = Vec::new();
+    for t in tags {
+        params.push(Box::new(t.clone()));
+    }
+    params.push(Box::new(tags.len() as i64));
+    TagQuery {
+        where_clause,
+        having_clause,
+        params,
+        next_param_idx: count_param + 1,
+    }
 }
 
 use rusqlite::OptionalExtension;

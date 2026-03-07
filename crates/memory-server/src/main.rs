@@ -62,14 +62,7 @@ async fn main() -> anyhow::Result<()> {
         other => anyhow::bail!("unsupported embedding provider: {other}"),
     };
 
-    let scorer = Arc::new(memory_core::scoring::Scorer::new(
-        memory_core::scoring::ScoringConfig {
-            relevance_weight: settings.scoring.relevance_weight,
-            confidence_weight: settings.scoring.confidence_weight,
-            recency_weight: settings.scoring.recency_weight,
-            recency_half_life_days: settings.scoring.recency_half_life_days,
-        },
-    ));
+    let scorer = Arc::new(memory_core::scoring::Scorer::new(settings.scoring.clone()));
 
     let store = Arc::new(memory_core::memory::MemoryStore::new(conn.clone()));
 
