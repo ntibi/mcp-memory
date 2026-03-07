@@ -426,25 +426,33 @@ impl UserStore {
             .call(move |conn| {
                 let tx = conn.transaction()?;
 
-                let key_count: i64 =
-                    tx.query_row("SELECT COUNT(*) FROM api_keys", [], |row| row.get(0))?;
-                if key_count > 0 {
-                    return Ok(None);
-                }
-
                 let now = chrono::Utc::now();
                 let now_str = now.to_rfc3339();
 
                 let user_id: Option<String> = tx
                     .query_row(
-                        "SELECT u.id FROM users u JOIN admins a ON u.id = a.user_id WHERE u.name = ?1 LIMIT 1",
+                        "SELECT id FROM users WHERE name = ?1 LIMIT 1",
                         rusqlite::params![user_name],
                         |row| row.get(0),
                     )
                     .optional()?;
 
                 let user_id = match user_id {
-                    Some(id) => id,
+                    Some(id) => {
+                        let has_keys: bool = tx.query_row(
+                            "SELECT EXISTS(SELECT 1 FROM api_keys WHERE user_id = ?1 AND revoked_at IS NULL)",
+                            rusqlite::params![id],
+                            |row| row.get(0),
+                        )?;
+                        if has_keys {
+                            return Ok(None);
+                        }
+                        tx.execute(
+                            "INSERT OR IGNORE INTO admins (user_id) VALUES (?1)",
+                            rusqlite::params![id],
+                        )?;
+                        id
+                    }
                     None => {
                         let id = ulid::Ulid::new().to_string();
                         tx.execute(
@@ -612,7 +620,7 @@ mod tests {
         let auth = store.authenticate(&key.raw_key).await.unwrap();
         assert!(auth.is_admin);
 
-        let result = store.bootstrap("admin2").await.unwrap();
+        let result = store.bootstrap("admin").await.unwrap();
         assert!(result.is_none());
     }
 
