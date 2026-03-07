@@ -135,24 +135,8 @@ impl MemoryStore {
 
                 let tags = load_tags(conn, &id)?;
 
-                let created_at: DateTime<Utc> = created_at
-                    .parse()
-                    .map_err(|e: chrono::ParseError| {
-                        rusqlite::Error::FromSqlConversionFailure(
-                            3,
-                            rusqlite::types::Type::Text,
-                            Box::new(e),
-                        )
-                    })?;
-                let updated_at: DateTime<Utc> = updated_at
-                    .parse()
-                    .map_err(|e: chrono::ParseError| {
-                        rusqlite::Error::FromSqlConversionFailure(
-                            4,
-                            rusqlite::types::Type::Text,
-                            Box::new(e),
-                        )
-                    })?;
+                let created_at = parse_datetime(&created_at)?;
+                let updated_at = parse_datetime(&updated_at)?;
 
                 Ok(Memory {
                     id,
@@ -261,24 +245,8 @@ impl MemoryStore {
                     )?;
 
                     let tags = load_tags(conn, &id)?;
-                    let created_at: DateTime<Utc> = created_at_str
-                        .parse()
-                        .map_err(|e: chrono::ParseError| {
-                            rusqlite::Error::FromSqlConversionFailure(
-                                0,
-                                rusqlite::types::Type::Text,
-                                Box::new(e),
-                            )
-                        })?;
-                    let updated_at: DateTime<Utc> = updated_at_str
-                        .parse()
-                        .map_err(|e: chrono::ParseError| {
-                            rusqlite::Error::FromSqlConversionFailure(
-                                0,
-                                rusqlite::types::Type::Text,
-                                Box::new(e),
-                            )
-                        })?;
+                    let created_at = parse_datetime(&created_at_str)?;
+                    let updated_at = parse_datetime(&updated_at_str)?;
 
                     memories.push(Memory {
                         id,
@@ -346,24 +314,8 @@ impl MemoryStore {
                 drop(stmt);
 
                 let tags = load_tags(&tx, &id)?;
-                let created_at: DateTime<Utc> = created_at_str
-                    .parse()
-                    .map_err(|e: chrono::ParseError| {
-                        rusqlite::Error::FromSqlConversionFailure(
-                            0,
-                            rusqlite::types::Type::Text,
-                            Box::new(e),
-                        )
-                    })?;
-                let updated_at: DateTime<Utc> = updated_at_str
-                    .parse()
-                    .map_err(|e: chrono::ParseError| {
-                        rusqlite::Error::FromSqlConversionFailure(
-                            0,
-                            rusqlite::types::Type::Text,
-                            Box::new(e),
-                        )
-                    })?;
+                let created_at = parse_datetime(&created_at_str)?;
+                let updated_at = parse_datetime(&updated_at_str)?;
 
                 let memory = Memory {
                     id,
@@ -607,24 +559,8 @@ impl MemoryStore {
                 let mut memories = Vec::with_capacity(raw.len());
                 for (id, mem_user_id, content, created_at_str, updated_at_str) in raw {
                     let tags = load_tags(conn, &id)?;
-                    let created_at: DateTime<Utc> = created_at_str
-                        .parse()
-                        .map_err(|e: chrono::ParseError| {
-                            rusqlite::Error::FromSqlConversionFailure(
-                                0,
-                                rusqlite::types::Type::Text,
-                                Box::new(e),
-                            )
-                        })?;
-                    let updated_at: DateTime<Utc> = updated_at_str
-                        .parse()
-                        .map_err(|e: chrono::ParseError| {
-                            rusqlite::Error::FromSqlConversionFailure(
-                                0,
-                                rusqlite::types::Type::Text,
-                                Box::new(e),
-                            )
-                        })?;
+                    let created_at = parse_datetime(&created_at_str)?;
+                    let updated_at = parse_datetime(&updated_at_str)?;
                     memories.push(Memory {
                         id,
                         user_id: mem_user_id,
@@ -705,24 +641,8 @@ impl MemoryStore {
 
                     let tags = load_tags(conn, id)?;
 
-                    let created_at: DateTime<Utc> = created_at_str
-                        .parse()
-                        .map_err(|e: chrono::ParseError| {
-                            rusqlite::Error::FromSqlConversionFailure(
-                                0,
-                                rusqlite::types::Type::Text,
-                                Box::new(e),
-                            )
-                        })?;
-                    let updated_at: DateTime<Utc> = updated_at_str
-                        .parse()
-                        .map_err(|e: chrono::ParseError| {
-                            rusqlite::Error::FromSqlConversionFailure(
-                                0,
-                                rusqlite::types::Type::Text,
-                                Box::new(e),
-                            )
-                        })?;
+                    let created_at = parse_datetime(&created_at_str)?;
+                    let updated_at = parse_datetime(&updated_at_str)?;
 
                     let helpful: u64 = conn.query_row(
                         "SELECT COUNT(*) FROM memory_votes WHERE memory_id = ?1 AND vote = 'helpful'",
@@ -906,24 +826,8 @@ impl MemoryStore {
                     )?;
 
                     let tags = load_tags(conn, &id)?;
-                    let created_at: DateTime<Utc> = created_at_str
-                        .parse()
-                        .map_err(|e: chrono::ParseError| {
-                            rusqlite::Error::FromSqlConversionFailure(
-                                0,
-                                rusqlite::types::Type::Text,
-                                Box::new(e),
-                            )
-                        })?;
-                    let updated_at: DateTime<Utc> = updated_at_str
-                        .parse()
-                        .map_err(|e: chrono::ParseError| {
-                            rusqlite::Error::FromSqlConversionFailure(
-                                0,
-                                rusqlite::types::Type::Text,
-                                Box::new(e),
-                            )
-                        })?;
+                    let created_at = parse_datetime(&created_at_str)?;
+                    let updated_at = parse_datetime(&updated_at_str)?;
 
                     memories.push(Memory {
                         id,
@@ -940,6 +844,12 @@ impl MemoryStore {
             .await
             .map_err(Error::Database)
     }
+}
+
+pub(crate) fn parse_datetime(s: &str) -> rusqlite::Result<DateTime<Utc>> {
+    s.parse().map_err(|e: chrono::ParseError| {
+        rusqlite::Error::FromSqlConversionFailure(0, rusqlite::types::Type::Text, Box::new(e))
+    })
 }
 
 fn load_tags(conn: &rusqlite::Connection, memory_id: &str) -> std::result::Result<Vec<String>, rusqlite::Error> {

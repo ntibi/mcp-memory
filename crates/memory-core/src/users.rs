@@ -6,6 +6,7 @@ use sha2::{Digest, Sha256};
 use tokio_rusqlite::Connection;
 
 use crate::error::{Error, Result};
+use crate::memory::parse_datetime;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct User {
@@ -104,16 +105,7 @@ impl UserStore {
                 let (id, name, created_at_str) =
                     row.ok_or_else(|| rusqlite::Error::QueryReturnedNoRows)?;
 
-                let created_at: DateTime<Utc> =
-                    created_at_str
-                        .parse()
-                        .map_err(|e: chrono::ParseError| {
-                            rusqlite::Error::FromSqlConversionFailure(
-                                2,
-                                rusqlite::types::Type::Text,
-                                Box::new(e),
-                            )
-                        })?;
+                let created_at = parse_datetime(&created_at_str)?;
 
                 Ok(User {
                     id,
@@ -146,16 +138,7 @@ impl UserStore {
                 let mut users = Vec::new();
                 for row in rows {
                     let (id, name, created_at_str) = row?;
-                    let created_at: DateTime<Utc> =
-                        created_at_str
-                            .parse()
-                            .map_err(|e: chrono::ParseError| {
-                                rusqlite::Error::FromSqlConversionFailure(
-                                    2,
-                                    rusqlite::types::Type::Text,
-                                    Box::new(e),
-                                )
-                            })?;
+                    let created_at = parse_datetime(&created_at_str)?;
                     users.push(User {
                         id,
                         name,
@@ -247,25 +230,8 @@ impl UserStore {
                 let mut keys = Vec::new();
                 for row in rows {
                     let (id, user_id, name, created_at_str, revoked_at_str) = row?;
-                    let created_at: DateTime<Utc> =
-                        created_at_str.parse().map_err(|e: chrono::ParseError| {
-                            rusqlite::Error::FromSqlConversionFailure(
-                                3,
-                                rusqlite::types::Type::Text,
-                                Box::new(e),
-                            )
-                        })?;
-                    let revoked_at: Option<DateTime<Utc>> = revoked_at_str
-                        .map(|s| {
-                            s.parse().map_err(|e: chrono::ParseError| {
-                                rusqlite::Error::FromSqlConversionFailure(
-                                    4,
-                                    rusqlite::types::Type::Text,
-                                    Box::new(e),
-                                )
-                            })
-                        })
-                        .transpose()?;
+                    let created_at = parse_datetime(&created_at_str)?;
+                    let revoked_at = revoked_at_str.map(|s| parse_datetime(&s)).transpose()?;
                     keys.push(ApiKey {
                         id,
                         user_id,
@@ -398,14 +364,7 @@ impl UserStore {
                 let mut users = Vec::new();
                 for row in rows {
                     let (id, name, created_at_str) = row?;
-                    let created_at: DateTime<Utc> =
-                        created_at_str.parse().map_err(|e: chrono::ParseError| {
-                            rusqlite::Error::FromSqlConversionFailure(
-                                2,
-                                rusqlite::types::Type::Text,
-                                Box::new(e),
-                            )
-                        })?;
+                    let created_at = parse_datetime(&created_at_str)?;
                     users.push(User {
                         id,
                         name,
