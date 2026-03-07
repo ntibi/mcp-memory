@@ -9,50 +9,24 @@ use clap::Parser;
 use memory_core::users::AuthContext;
 use memory_server::{admin, api, auth, config, mcp};
 use rmcp::transport::streamable_http_server::{
-    StreamableHttpService, session::local::LocalSessionManager,
+    StreamableHttpService, StreamableHttpServerConfig,
+    session::local::LocalSessionManager,
 };
-use tower::ServiceExt;
 use tracing_subscriber::EnvFilter;
 
 use api::AppState;
 use config::{Cli, Settings};
 
-#[derive(Clone)]
-struct McpState {
-    store: Arc<memory_core::memory::MemoryStore>,
-    embedder: Arc<dyn memory_core::embed::Embedder>,
-    scorer: Arc<memory_core::scoring::Scorer>,
-}
+type McpService = StreamableHttpService<mcp::MemoryMcp, LocalSessionManager>;
 
 async fn mcp_handler(
     Extension(auth): Extension<AuthContext>,
-    State(state): State<McpState>,
+    State(service): State<Arc<McpService>>,
     request: Request,
 ) -> impl IntoResponse {
-    let service = StreamableHttpService::new(
-        {
-            let store = state.store.clone();
-            let embedder = state.embedder.clone();
-            let scorer = state.scorer.clone();
-            let user_id = auth.user_id.clone();
-            move || {
-                Ok(mcp::MemoryMcp::new(
-                    store.clone(),
-                    embedder.clone(),
-                    scorer.clone(),
-                    user_id.clone(),
-                ))
-            }
-        },
-        Arc::new(LocalSessionManager::default()),
-        Default::default(),
-    );
-    match service.oneshot(request).await {
-        Ok(resp) => resp.into_response(),
-        Err(e) => {
-            (axum::http::StatusCode::INTERNAL_SERVER_ERROR, e.to_string()).into_response()
-        }
-    }
+    let mut request = request;
+    request.extensions_mut().insert(auth);
+    service.handle(request).await.into_response()
 }
 
 #[tokio::main]
@@ -116,10 +90,15 @@ async fn main() -> anyhow::Result<()> {
         user_store: user_store.clone(),
     };
 
-    let mcp_state = McpState {
-        store: store.clone(),
-        embedder: embedder.clone(),
-        scorer: scorer.clone(),
+    let mcp_service = {
+        let store = store.clone();
+        let embedder = embedder.clone();
+        let scorer = scorer.clone();
+        Arc::new(StreamableHttpService::new(
+            move || Ok(mcp::MemoryMcp::new(store.clone(), embedder.clone(), scorer.clone())),
+            Arc::new(LocalSessionManager::default()),
+            StreamableHttpServerConfig::default(),
+        ))
     };
 
     let ui_state = memory_ui::UiState {
@@ -146,7 +125,7 @@ async fn main() -> anyhow::Result<()> {
             axum::routing::post(mcp_handler)
                 .get(mcp_handler)
                 .delete(mcp_handler)
-                .with_state(mcp_state),
+                .with_state(mcp_service),
         )
         .nest("/api/v1", api::router().with_state(app_state))
         .nest("/ui", memory_ui::router().with_state(ui_state))

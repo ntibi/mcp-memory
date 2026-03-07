@@ -5,8 +5,10 @@ use memory_core::{
     memory::{CreateMemory, MemoryStore},
     scoring::Scorer,
 };
+use memory_core::users::AuthContext;
 use rmcp::{
     ServerHandler,
+    handler::server::common::Extension,
     handler::server::wrapper::Parameters,
     model::*,
     tool, tool_handler, tool_router,
@@ -57,7 +59,6 @@ pub struct MemoryMcp {
     store: Arc<MemoryStore>,
     embedder: Arc<dyn Embedder>,
     scorer: Arc<Scorer>,
-    user_id: String,
     tool_router: ToolRouter<Self>,
 }
 
@@ -66,17 +67,23 @@ impl MemoryMcp {
         store: Arc<MemoryStore>,
         embedder: Arc<dyn Embedder>,
         scorer: Arc<Scorer>,
-        user_id: String,
     ) -> Self {
         let tool_router = Self::tool_router();
         Self {
             store,
             embedder,
             scorer,
-            user_id,
             tool_router,
         }
     }
+}
+
+fn user_id_from_parts(parts: &axum::http::request::Parts) -> Result<String, String> {
+    parts
+        .extensions
+        .get::<AuthContext>()
+        .map(|a| a.user_id.clone())
+        .ok_or_else(|| "missing auth context".to_string())
 }
 
 type ToolRouter<S> = rmcp::handler::server::router::tool::ToolRouter<S>;
@@ -140,20 +147,22 @@ impl MemoryMcp {
     #[tool(description = "Store a new memory with tags. Tag generously across every relevant dimension — language, domain, tool, activity, project. A memory about 'fixing a postgres connection pool timeout in rust' should get at least [project-name, rust, postgres, connection-pooling, debugging, performance]. Err on the side of too many tags. Returns the stored memory plus related existing memories for context.", annotations(read_only_hint = false, destructive_hint = false, idempotent_hint = false, open_world_hint = false))]
     async fn store_memory(
         &self,
+        Extension(parts): Extension<axum::http::request::Parts>,
         Parameters(params): Parameters<StoreMemoryParams>,
     ) -> Result<String, String> {
+        let user_id = user_id_from_parts(&parts)?;
         let input = CreateMemory {
             content: params.content.clone(),
             tags: params.tags,
         };
         let memory = self
             .store
-            .create(&self.user_id, input, self.embedder.as_ref())
+            .create(&user_id, input, self.embedder.as_ref())
             .await
             .map_err(|e| e.to_string())?;
         let related = self
             .store
-            .recall(&self.user_id, &params.content, 5, self.embedder.as_ref(), self.scorer.as_ref())
+            .recall(&user_id, &params.content, 5, self.embedder.as_ref(), self.scorer.as_ref())
             .await
             .unwrap_or_default()
             .into_iter()
@@ -170,8 +179,10 @@ impl MemoryMcp {
     #[tool(description = "Load context at the start of a session. Combines tag-based search (project + universal) with semantic recall of the current task, returning a deduplicated set of memories. Call this once at session start instead of separate search_by_tags + recall_memory calls.", annotations(read_only_hint = true, destructive_hint = false, open_world_hint = false))]
     async fn session_start(
         &self,
+        Extension(parts): Extension<axum::http::request::Parts>,
         Parameters(params): Parameters<SessionStartParams>,
     ) -> Result<String, String> {
+        let user_id = user_id_from_parts(&parts)?;
         let n = params.n.unwrap_or(40);
         let half = n / 2;
 
@@ -179,20 +190,20 @@ impl MemoryMcp {
             vec![]
         } else {
             self.store
-                .search_by_tags(&self.user_id, &params.tags, half)
+                .search_by_tags(&user_id, &params.tags, half)
                 .await
                 .unwrap_or_default()
         };
 
         let universal = self
             .store
-            .search_by_tags(&self.user_id, &["universal".into()], half / 4)
+            .search_by_tags(&user_id, &["universal".into()], half / 4)
             .await
             .unwrap_or_default();
 
         let semantic = self
             .store
-            .recall(&self.user_id, &params.task, half, self.embedder.as_ref(), self.scorer.as_ref())
+            .recall(&user_id, &params.task, half, self.embedder.as_ref(), self.scorer.as_ref())
             .await
             .unwrap_or_default()
             .into_iter()
@@ -214,13 +225,15 @@ impl MemoryMcp {
     #[tool(description = "Recall memories using semantic search. Finds stored memories most relevant to the query using vector similarity, ranked by relevance, confidence, and recency. Use this for open-ended lookups where you don't know the exact category — describe what you're looking for in natural language.", annotations(read_only_hint = true, destructive_hint = false, open_world_hint = false))]
     async fn recall_memory(
         &self,
+        Extension(parts): Extension<axum::http::request::Parts>,
         Parameters(params): Parameters<RecallMemoryParams>,
     ) -> Result<String, String> {
+        let user_id = user_id_from_parts(&parts)?;
         let n = params.n.unwrap_or(20);
         let results = self
             .store
             .recall(
-                &self.user_id,
+                &user_id,
                 &params.query,
                 n,
                 self.embedder.as_ref(),
@@ -234,16 +247,18 @@ impl MemoryMcp {
     #[tool(description = "Update an existing memory's content and optionally its tags. The embedding is recomputed from the new content. Use this when a memory is outdated or partially wrong but the core topic is the same.", annotations(read_only_hint = false, destructive_hint = false, idempotent_hint = true, open_world_hint = false))]
     async fn update_memory(
         &self,
+        Extension(parts): Extension<axum::http::request::Parts>,
         Parameters(params): Parameters<UpdateMemoryParams>,
     ) -> Result<String, String> {
+        let user_id = user_id_from_parts(&parts)?;
         let memory = self
             .store
-            .update(&self.user_id, &params.id, &params.content, self.embedder.as_ref())
+            .update(&user_id, &params.id, &params.content, self.embedder.as_ref())
             .await
             .map_err(|e| e.to_string())?;
         if let Some(tags) = params.tags {
             self.store
-                .set_tags(&self.user_id, &params.id, tags)
+                .set_tags(&user_id, &params.id, tags)
                 .await
                 .map_err(|e| e.to_string())?;
         }
@@ -253,10 +268,12 @@ impl MemoryMcp {
     #[tool(description = "Delete a memory by ID. Use this when a memory is completely wrong or superseded. This is irreversible.", annotations(read_only_hint = false, destructive_hint = true, idempotent_hint = true, open_world_hint = false))]
     async fn delete_memory(
         &self,
+        Extension(parts): Extension<axum::http::request::Parts>,
         Parameters(params): Parameters<DeleteMemoryParams>,
     ) -> Result<String, String> {
+        let user_id = user_id_from_parts(&parts)?;
         self.store
-            .delete(&self.user_id, &params.id)
+            .delete(&user_id, &params.id)
             .await
             .map_err(|e| e.to_string())?;
         Ok(format!("deleted memory {}", params.id))
@@ -265,12 +282,14 @@ impl MemoryMcp {
     #[tool(description = "Search memories by exact tag match. Returns all memories tagged with the specified tag, ordered by creation time. Use this when you know the category of information you're looking for rather than searching by content.", annotations(read_only_hint = true, destructive_hint = false, open_world_hint = false))]
     async fn search_by_tags(
         &self,
+        Extension(parts): Extension<axum::http::request::Parts>,
         Parameters(params): Parameters<SearchByTagParams>,
     ) -> Result<String, String> {
+        let user_id = user_id_from_parts(&parts)?;
         let n = params.n.unwrap_or(20);
         let results = self
             .store
-            .search_by_tags(&self.user_id, &params.tags, n)
+            .search_by_tags(&user_id, &params.tags, n)
             .await
             .map_err(|e| e.to_string())?;
         serde_json::to_string(&results).map_err(|e| e.to_string())
