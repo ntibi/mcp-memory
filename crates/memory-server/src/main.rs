@@ -143,7 +143,10 @@ async fn main() -> anyhow::Result<()> {
     let authed = axum::Router::new()
         .route(
             "/mcp",
-            axum::routing::post(mcp_handler).with_state(mcp_state),
+            axum::routing::post(mcp_handler)
+                .get(mcp_handler)
+                .delete(mcp_handler)
+                .with_state(mcp_state),
         )
         .nest("/api/v1", api::router().with_state(app_state))
         .nest("/ui", memory_ui::router().with_state(ui_state))
