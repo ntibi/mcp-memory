@@ -27,26 +27,19 @@ Options:
 
 ### MCP (Claude Code)
 
-Start the server, then add to your Claude Code MCP config:
-
-```json
-{
-  "mcpServers": {
-    "memory": {
-      "url": "http://localhost:8000/mcp"
-    }
-  }
-}
-```
+Start the server, then add it to Claude Code:
 
 ```bash
-claude --mcp-config mcp.json
+claude mcp add memory --transport http --url http://localhost:8000/mcp --header "Authorization: Bearer <your-api-key>"
 ```
 
-Three tools are exposed:
-- `store_memory` — store content with optional tags
+Tools:
+- `store_memory` — store content with tags
+- `session_start` — combined tag search + semantic recall for session init
 - `recall_memory` — semantic search, returns top N ranked results
-- `search_by_tag` — exact tag match
+- `update_memory` — update content/tags of an existing memory
+- `delete_memory` — delete a memory by ID
+- `search_by_tags` — exact tag match (AND semantics across multiple tags)
 
 ### REST API
 
@@ -71,7 +64,7 @@ Layered: defaults → `config.toml` → environment variables (`MEMORY__` prefix
 ```toml
 listen_addr = "127.0.0.1:8000"
 db_path = "memory.db"
-api_key = ""  # empty = no auth
+bootstrap_user = "admin"  # creates admin user + API key on first run (printed to logs)
 
 [embedding]
 provider = "local"       # "local" (ONNX) or "remote" (OpenAI-compatible)
@@ -83,6 +76,7 @@ model = "all-MiniLM-L6-v2"
 relevance_weight = 0.6
 confidence_weight = 0.25
 recency_weight = 0.15
+recency_half_life_days = 30.0
 
 [curation]
 interval_secs = 3600
@@ -91,11 +85,17 @@ similarity_threshold = 0.85
 
 Environment variable examples:
 ```bash
-MEMORY__API_KEY=secret
+MEMORY__BOOTSTRAP_USER=admin
 MEMORY__LISTEN_ADDR=0.0.0.0:8000
 MEMORY__EMBEDDING__PROVIDER=remote
 MEMORY__EMBEDDING__API_KEY=sk-...
 ```
+
+## Auth
+
+Multi-user API key authentication. On first run, a bootstrap user is created with an API key printed to logs. Use it as a Bearer token or `api_key` cookie.
+
+Admin users can manage users, keys and memories via the admin UI at `/ui/admin` or the REST API at `/api/v1/admin/`.
 
 ## How it works
 
@@ -110,8 +110,8 @@ score = relevance * 0.6 + confidence * 0.25 + recency * 0.15
 ```
 
 - **relevance** — cosine similarity between query and memory embeddings
-- **confidence** — ratio of helpful votes: `helpful / (helpful + harmful)`, defaults to 0.5
-- **recency** — `1 / (1 + age_days)`
+- **confidence** — Wilson score lower bound (95% CI) over helpful/harmful votes, defaults to 0.5
+- **recency** — exponential decay with configurable half-life: `e^(-ln2 / half_life * age_days)` (default 30 days)
 
 **Curation**: background task runs periodically to find near-duplicate memories (above similarity threshold) and suggests merges/prunes.
 
@@ -119,7 +119,7 @@ score = relevance * 0.6 + confidence * 0.25 + recency * 0.15
 
 ```bash
 docker build -t memory .
-docker run -p 8000:8000 -e MEMORY__LISTEN_ADDR=0.0.0.0:8000 -e MEMORY__API_KEY=secret -v memory-data:/data memory
+docker run -p 8000:8000 -e MEMORY__LISTEN_ADDR=0.0.0.0:8000 -v memory-data:/data memory
 ```
 
 ## Architecture
