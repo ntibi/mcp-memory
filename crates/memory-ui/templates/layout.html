@@ -31,6 +31,9 @@
                        hx-push-url="true"
                        hx-indicator="#search-indicator">
                 <span id="search-indicator" class="htmx-indicator" aria-busy="true"></span>
+                {% if is_admin %}
+                <a href="/ui/admin" class="admin-btn" aria-label="Admin">Admin</a>
+                {% endif %}
                 <button class="logout-btn" onclick="logout()" aria-label="Logout">Logout</button>
                 <button class="theme-toggle" onclick="toggleTheme()" aria-label="Toggle theme">
                     <svg class="icon-sun" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">

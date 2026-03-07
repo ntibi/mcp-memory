@@ -21,11 +21,14 @@ pub struct MemoryQuery {
     pub cursor: Option<String>,
 }
 
-pub async fn index(HxRequest(is_htmx): HxRequest) -> Response {
+pub async fn index(
+    Extension(auth): Extension<AuthContext>,
+    HxRequest(is_htmx): HxRequest,
+) -> Response {
     if is_htmx {
         StatusCode::OK.into_response()
     } else {
-        LayoutTemplate.into_response()
+        LayoutTemplate { is_admin: auth.is_admin }.into_response()
     }
 }
 
@@ -36,7 +39,7 @@ pub async fn list_memories(
     Query(q): Query<MemoryQuery>,
 ) -> Response {
     if !is_htmx {
-        return LayoutTemplate.into_response();
+        return LayoutTemplate { is_admin: auth.is_admin }.into_response();
     }
 
     let limit = 20;

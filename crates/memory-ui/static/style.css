@@ -553,7 +553,7 @@ header {
 }
 .login-card button:hover { background: var(--accent-hover); }
 .login-card .error { color: var(--danger); margin-top: 0.5rem; font-size: 0.8125rem; }
-.logout-btn {
+.admin-btn, .logout-btn {
     background: none;
     border: 1px solid var(--border);
     color: var(--text-secondary);
@@ -562,8 +562,9 @@ header {
     cursor: pointer;
     font-family: inherit;
     font-size: 0.8125rem;
+    text-decoration: none;
 }
-.logout-btn:hover {
+.admin-btn:hover, .logout-btn:hover {
     background: var(--surface-hover);
     color: var(--text-primary);
 }
