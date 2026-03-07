@@ -426,25 +426,38 @@ impl UserStore {
             .call(move |conn| {
                 let tx = conn.transaction()?;
 
-                let count: i64 =
-                    tx.query_row("SELECT COUNT(*) FROM users", [], |row| row.get(0))?;
-                if count > 0 {
+                let key_count: i64 =
+                    tx.query_row("SELECT COUNT(*) FROM api_keys", [], |row| row.get(0))?;
+                if key_count > 0 {
                     return Ok(None);
                 }
 
-                let user_id = ulid::Ulid::new().to_string();
                 let now = chrono::Utc::now();
                 let now_str = now.to_rfc3339();
 
-                tx.execute(
-                    "INSERT INTO users (id, name, created_at) VALUES (?1, ?2, ?3)",
-                    rusqlite::params![user_id, user_name, now_str],
-                )?;
+                let user_id: Option<String> = tx
+                    .query_row(
+                        "SELECT u.id FROM users u JOIN admins a ON u.id = a.user_id WHERE u.name = ?1 LIMIT 1",
+                        rusqlite::params![user_name],
+                        |row| row.get(0),
+                    )
+                    .optional()?;
 
-                tx.execute(
-                    "INSERT INTO admins (user_id) VALUES (?1)",
-                    rusqlite::params![user_id],
-                )?;
+                let user_id = match user_id {
+                    Some(id) => id,
+                    None => {
+                        let id = ulid::Ulid::new().to_string();
+                        tx.execute(
+                            "INSERT INTO users (id, name, created_at) VALUES (?1, ?2, ?3)",
+                            rusqlite::params![id, user_name, now_str],
+                        )?;
+                        tx.execute(
+                            "INSERT INTO admins (user_id) VALUES (?1)",
+                            rusqlite::params![id],
+                        )?;
+                        id
+                    }
+                };
 
                 let raw_key = generate_raw_key();
                 let key_hash = hash_key(&raw_key);
