@@ -280,15 +280,9 @@ impl MemoryMcp {
 #[tool_handler]
 impl ServerHandler for MemoryMcp {
     fn get_info(&self) -> ServerInfo {
-        ServerInfo {
-            protocol_version: ProtocolVersion::V_2025_03_26,
-            capabilities: ServerCapabilities::builder().enable_tools().build(),
-            server_info: Implementation {
-                name: "memory-server".to_string(),
-                version: env!("CARGO_PKG_VERSION").to_string(),
-                ..Default::default()
-            },
-            instructions: Some(concat!(
+        ServerInfo::new(ServerCapabilities::builder().enable_tools().build())
+            .with_server_info(Implementation::new("memory-server", env!("CARGO_PKG_VERSION")))
+            .with_instructions(concat!(
                 "Persistent semantic memory for LLM agents. ",
                 "MANDATORY on every session start: call `session_start` with tags (e.g. [\"project:memory\"]) and a description of the user's task. Do this BEFORE any other action. ",
                 "Store aggressively: after solving any non-trivial problem, learning a preference, or making an architectural decision, call `store_memory` immediately. Do not wait. `store_memory` returns related existing memories — read them. Use `update_memory` to fix outdated memories, `delete_memory` to remove wrong or superseded ones. ",
@@ -296,7 +290,6 @@ impl ServerHandler for MemoryMcp {
                 "Tag every memory with `project:<name>` (e.g. `project:memory`) plus all relevant categories (language, domain, tool, activity, concept, subject, knowledge-type, scope). Aim for at least 3 tags per memory. More tags is always better than fewer. Tag with `universal` for memories that apply across all projects (e.g. user preferences, workflow conventions, machine setup). `session_start` automatically includes `universal` memories. ",
                 "When a request is ambiguous, unclear, or seems to lack context: call `recall_memory` with the confusing parts before asking the user for clarification. Prior memories often contain the missing context. ",
                 "Prefer `recall_memory` for open-ended lookups, `search_by_tags` for known categories. Multiple tags use AND logic — only memories matching ALL specified tags are returned. ",
-            ).to_string()),
-        }
+            ))
     }
 }
