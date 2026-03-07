@@ -21,7 +21,6 @@ tower-http.workspace = true
 thiserror.workspace = true
 chrono.workspace = true
 anyhow.workspace = true
-subtle.workspace = true
 memory-ui.workspace = true
 
 [dev-dependencies]

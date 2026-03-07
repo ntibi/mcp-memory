@@ -1,0 +1,14 @@
+{% if stats.is_empty() %}
+<p class="admin-empty">No memories stored yet.</p>
+{% else %}
+<table class="admin-table">
+    <thead>
+        <tr><th>User</th><th>Memories</th></tr>
+    </thead>
+    <tbody>
+        {% for (user_id, count) in stats %}
+        <tr><td><code>{{ user_id }}</code></td><td>{{ count }}</td></tr>
+        {% endfor %}
+    </tbody>
+</table>
+{% endif %}

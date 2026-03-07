@@ -31,6 +31,7 @@
                        hx-push-url="true"
                        hx-indicator="#search-indicator">
                 <span id="search-indicator" class="htmx-indicator" aria-busy="true"></span>
+                <button class="logout-btn" onclick="logout()" aria-label="Logout">Logout</button>
                 <button class="theme-toggle" onclick="toggleTheme()" aria-label="Toggle theme">
                     <svg class="icon-sun" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                         <circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/>
@@ -85,10 +86,28 @@
         })();
 
         document.body.addEventListener('htmx:configRequest', function(e) {
+            var key = localStorage.getItem('api_key');
+            if (key) {
+                e.detail.headers['Authorization'] = 'Bearer ' + key;
+            }
             if (e.detail.elt.classList.contains('sidebar')) {
                 e.detail.parameters.tag = tagParam();
             }
         });
+
+        document.body.addEventListener('htmx:responseError', function(e) {
+            if (e.detail.xhr.status === 401) {
+                localStorage.removeItem('api_key');
+                document.cookie = 'api_key=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT';
+                window.location.href = '/ui/login';
+            }
+        });
+
+        function logout() {
+            localStorage.removeItem('api_key');
+            document.cookie = 'api_key=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT';
+            window.location.href = '/ui/login';
+        }
 
         function toggleTheme() {
             var cur = document.documentElement.getAttribute('data-theme');

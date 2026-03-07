@@ -4,11 +4,12 @@ use axum::extract::{Path, Query, State};
 use axum::http::StatusCode;
 use axum::response::IntoResponse;
 use axum::routing::{get, post};
-use axum::{Json, Router};
+use axum::{Extension, Json, Router};
 use memory_core::embed::Embedder;
 use memory_core::error::Error;
 use memory_core::memory::{CreateMemory, ListFilter, MemoryStore};
 use memory_core::scoring::Scorer;
+use memory_core::users::{AuthContext, UserStore};
 use serde::Deserialize;
 use serde_json::json;
 
@@ -18,6 +19,7 @@ pub struct AppState {
     pub embedder: Arc<dyn Embedder>,
     pub scorer: Arc<Scorer>,
     pub conn: tokio_rusqlite::Connection,
+    pub user_store: Arc<UserStore>,
 }
 
 pub fn router() -> Router<AppState> {
@@ -66,6 +68,7 @@ struct ListQuery {
 
 async fn list_memories(
     State(state): State<AppState>,
+    Extension(auth): Extension<AuthContext>,
     Query(query): Query<ListQuery>,
 ) -> impl IntoResponse {
     let tags = query
@@ -81,7 +84,7 @@ async fn list_memories(
         offset: query.offset,
     };
 
-    match state.store.list(filter).await {
+    match state.store.list(&auth.user_id, filter).await {
         Ok(memories) => Json(json!(memories)).into_response(),
         Err(e) => error_response(&e),
     }
@@ -89,9 +92,10 @@ async fn list_memories(
 
 async fn get_memory(
     State(state): State<AppState>,
+    Extension(auth): Extension<AuthContext>,
     Path(id): Path<String>,
 ) -> impl IntoResponse {
-    match state.store.get(&id).await {
+    match state.store.get(&auth.user_id, &id).await {
         Ok(memory) => Json(json!(memory)).into_response(),
         Err(e) => error_response(&e),
     }
@@ -99,6 +103,7 @@ async fn get_memory(
 
 async fn create_memory(
     State(state): State<AppState>,
+    Extension(auth): Extension<AuthContext>,
     Json(body): Json<CreateBody>,
 ) -> impl IntoResponse {
     let input = CreateMemory {
@@ -106,7 +111,11 @@ async fn create_memory(
         tags: body.tags.unwrap_or_default(),
     };
 
-    match state.store.create(input, state.embedder.as_ref()).await {
+    match state
+        .store
+        .create(&auth.user_id, input, state.embedder.as_ref())
+        .await
+    {
         Ok(memory) => (StatusCode::CREATED, Json(json!(memory))).into_response(),
         Err(e) => error_response(&e),
     }
@@ -114,12 +123,13 @@ async fn create_memory(
 
 async fn update_memory(
     State(state): State<AppState>,
+    Extension(auth): Extension<AuthContext>,
     Path(id): Path<String>,
     Json(body): Json<UpdateBody>,
 ) -> impl IntoResponse {
     match state
         .store
-        .update(&id, &body.content, state.embedder.as_ref())
+        .update(&auth.user_id, &id, &body.content, state.embedder.as_ref())
         .await
     {
         Ok(memory) => Json(json!(memory)).into_response(),
@@ -129,9 +139,10 @@ async fn update_memory(
 
 async fn delete_memory(
     State(state): State<AppState>,
+    Extension(auth): Extension<AuthContext>,
     Path(id): Path<String>,
 ) -> impl IntoResponse {
-    match state.store.delete(&id).await {
+    match state.store.delete(&auth.user_id, &id).await {
         Ok(()) => StatusCode::NO_CONTENT.into_response(),
         Err(e) => error_response(&e),
     }
@@ -139,10 +150,11 @@ async fn delete_memory(
 
 async fn vote_memory(
     State(state): State<AppState>,
+    Extension(auth): Extension<AuthContext>,
     Path(id): Path<String>,
     Json(body): Json<VoteBody>,
 ) -> impl IntoResponse {
-    match state.store.vote(&id, &body.vote).await {
+    match state.store.vote(&auth.user_id, &id, &body.vote).await {
         Ok(vote) => (StatusCode::CREATED, Json(json!(vote))).into_response(),
         Err(e) => error_response(&e),
     }
@@ -160,10 +172,11 @@ struct SuggestionsQuery {
 
 async fn find_duplicates_handler(
     State(state): State<AppState>,
+    Extension(auth): Extension<AuthContext>,
     Query(query): Query<DuplicatesQuery>,
 ) -> impl IntoResponse {
     let threshold = query.threshold.unwrap_or(0.85);
-    match memory_core::curation::find_duplicates(&state.conn, threshold).await {
+    match memory_core::curation::find_duplicates(&state.conn, &auth.user_id, threshold).await {
         Ok(candidates) => Json(json!(candidates)).into_response(),
         Err(e) => error_response(&e),
     }
@@ -171,9 +184,12 @@ async fn find_duplicates_handler(
 
 async fn list_suggestions_handler(
     State(state): State<AppState>,
+    Extension(auth): Extension<AuthContext>,
     Query(query): Query<SuggestionsQuery>,
 ) -> impl IntoResponse {
-    match memory_core::curation::list_suggestions(&state.conn, query.status.as_deref()).await {
+    match memory_core::curation::list_suggestions(&state.conn, &auth.user_id, query.status.as_deref())
+        .await
+    {
         Ok(suggestions) => Json(json!(suggestions)).into_response(),
         Err(e) => error_response(&e),
     }
@@ -181,9 +197,17 @@ async fn list_suggestions_handler(
 
 async fn apply_suggestion_handler(
     State(state): State<AppState>,
+    Extension(auth): Extension<AuthContext>,
     Path(id): Path<String>,
 ) -> impl IntoResponse {
-    match memory_core::curation::update_suggestion_status(&state.conn, &id, "applied").await {
+    match memory_core::curation::update_suggestion_status(
+        &state.conn,
+        &auth.user_id,
+        &id,
+        "applied",
+    )
+    .await
+    {
         Ok(()) => Json(json!({"status": "applied"})).into_response(),
         Err(e) => error_response(&e),
     }
@@ -191,9 +215,17 @@ async fn apply_suggestion_handler(
 
 async fn dismiss_suggestion_handler(
     State(state): State<AppState>,
+    Extension(auth): Extension<AuthContext>,
     Path(id): Path<String>,
 ) -> impl IntoResponse {
-    match memory_core::curation::update_suggestion_status(&state.conn, &id, "dismissed").await {
+    match memory_core::curation::update_suggestion_status(
+        &state.conn,
+        &auth.user_id,
+        &id,
+        "dismissed",
+    )
+    .await
+    {
         Ok(()) => Json(json!({"status": "dismissed"})).into_response(),
         Err(e) => error_response(&e),
     }

@@ -21,13 +21,16 @@ pub struct CurationSuggestion {
     pub created_at: String,
 }
 
-pub async fn find_duplicates(conn: &Connection, threshold: f64) -> Result<Vec<DuplicateCandidate>> {
+pub async fn find_duplicates(conn: &Connection, user_id: &str, threshold: f64) -> Result<Vec<DuplicateCandidate>> {
+    let user_id = user_id.to_string();
     conn.call(move |conn| {
         let mut stmt = conn.prepare(
-            "SELECT memory_id, embedding FROM memory_embeddings",
+            "SELECT me.memory_id, me.embedding FROM memory_embeddings me \
+             JOIN memories m ON me.memory_id = m.id \
+             WHERE m.user_id = ?1",
         )?;
 
-        let rows = stmt.query_map([], |row| {
+        let rows = stmt.query_map(rusqlite::params![user_id], |row| {
             let id: String = row.get(0)?;
             let blob: Vec<u8> = row.get(1)?;
             Ok((id, blob))
@@ -81,6 +84,7 @@ fn cosine_similarity(a: &[f32], b: &[f32]) -> f64 {
 
 pub async fn store_suggestion(
     conn: &Connection,
+    user_id: &str,
     suggestion_type: &str,
     memory_ids: &[String],
     suggestion: &str,
@@ -92,15 +96,16 @@ pub async fn store_suggestion(
         .map_err(|e| Error::Curation(format!("failed to serialize memory_ids: {e}")))?;
 
     let id_clone = id.clone();
+    let user_id = user_id.to_string();
     let suggestion_type = suggestion_type.to_string();
     let suggestion = suggestion.to_string();
     let source = source.to_string();
 
     conn.call(move |conn| {
         conn.execute(
-            "INSERT INTO curation_suggestions (id, type, memory_ids, suggestion, source, status, created_at) \
-             VALUES (?1, ?2, ?3, ?4, ?5, 'pending', ?6)",
-            rusqlite::params![id_clone, suggestion_type, memory_ids_json, suggestion, source, now],
+            "INSERT INTO curation_suggestions (id, user_id, type, memory_ids, suggestion, source, status, created_at) \
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, 'pending', ?7)",
+            rusqlite::params![id_clone, user_id, suggestion_type, memory_ids_json, suggestion, source, now],
         )?;
         Ok(())
     })
@@ -112,24 +117,26 @@ pub async fn store_suggestion(
 
 pub async fn list_suggestions(
     conn: &Connection,
+    user_id: &str,
     status: Option<&str>,
 ) -> Result<Vec<CurationSuggestion>> {
+    let user_id = user_id.to_string();
     let status = status.map(|s| s.to_string());
 
     conn.call(move |conn| {
         let suggestions = if let Some(ref status) = status {
             let mut stmt = conn.prepare(
                 "SELECT id, type, memory_ids, suggestion, source, status, created_at \
-                 FROM curation_suggestions WHERE status = ?1 ORDER BY created_at DESC",
+                 FROM curation_suggestions WHERE user_id = ?1 AND status = ?2 ORDER BY created_at DESC",
             )?;
-            let rows = stmt.query_map(rusqlite::params![status], parse_suggestion_row)?;
+            let rows = stmt.query_map(rusqlite::params![user_id, status], parse_suggestion_row)?;
             rows.collect::<std::result::Result<Vec<_>, _>>()?
         } else {
             let mut stmt = conn.prepare(
                 "SELECT id, type, memory_ids, suggestion, source, status, created_at \
-                 FROM curation_suggestions ORDER BY created_at DESC",
+                 FROM curation_suggestions WHERE user_id = ?1 ORDER BY created_at DESC",
             )?;
-            let rows = stmt.query_map([], parse_suggestion_row)?;
+            let rows = stmt.query_map(rusqlite::params![user_id], parse_suggestion_row)?;
             rows.collect::<std::result::Result<Vec<_>, _>>()?
         };
         Ok(suggestions)
@@ -160,6 +167,7 @@ fn parse_suggestion_row(row: &rusqlite::Row) -> rusqlite::Result<CurationSuggest
 
 pub async fn update_suggestion_status(
     conn: &Connection,
+    user_id: &str,
     id: &str,
     status: &str,
 ) -> Result<()> {
@@ -170,13 +178,14 @@ pub async fn update_suggestion_status(
     }
 
     let id = id.to_string();
+    let user_id = user_id.to_string();
     let status = status.to_string();
 
     let changed = conn
         .call(move |conn| {
             let changed = conn.execute(
-                "UPDATE curation_suggestions SET status = ?1 WHERE id = ?2",
-                rusqlite::params![status, id],
+                "UPDATE curation_suggestions SET status = ?1 WHERE id = ?2 AND user_id = ?3",
+                rusqlite::params![status, id, user_id],
             )?;
             Ok(changed)
         })
@@ -196,17 +205,19 @@ mod tests {
     use crate::embed::LocalEmbedder;
     use crate::memory::{CreateMemory, MemoryStore};
 
+    const TEST_USER: &str = "test-user";
+
     #[tokio::test]
     async fn should_detect_duplicate_memories() {
         let conn = crate::db::open_in_memory().await.unwrap();
         let embedder = LocalEmbedder::new("all-MiniLM-L6-v2").unwrap();
         let store = MemoryStore::new(conn.clone());
 
-        store.create(CreateMemory { content: "rust is a systems programming language".into(), tags: vec![] }, &embedder).await.unwrap();
-        store.create(CreateMemory { content: "rust is a systems-level programming language".into(), tags: vec![] }, &embedder).await.unwrap();
-        store.create(CreateMemory { content: "chocolate cake recipe with frosting".into(), tags: vec![] }, &embedder).await.unwrap();
+        store.create(TEST_USER, CreateMemory { content: "rust is a systems programming language".into(), tags: vec![] }, &embedder).await.unwrap();
+        store.create(TEST_USER, CreateMemory { content: "rust is a systems-level programming language".into(), tags: vec![] }, &embedder).await.unwrap();
+        store.create(TEST_USER, CreateMemory { content: "chocolate cake recipe with frosting".into(), tags: vec![] }, &embedder).await.unwrap();
 
-        let dupes = find_duplicates(&conn, 0.8).await.unwrap();
+        let dupes = find_duplicates(&conn, TEST_USER, 0.8).await.unwrap();
         assert!(!dupes.is_empty());
         assert!(dupes[0].similarity > 0.8);
     }
@@ -217,10 +228,10 @@ mod tests {
         let embedder = LocalEmbedder::new("all-MiniLM-L6-v2").unwrap();
         let store = MemoryStore::new(conn.clone());
 
-        store.create(CreateMemory { content: "rust is a systems programming language".into(), tags: vec![] }, &embedder).await.unwrap();
-        store.create(CreateMemory { content: "chocolate cake recipe with frosting".into(), tags: vec![] }, &embedder).await.unwrap();
+        store.create(TEST_USER, CreateMemory { content: "rust is a systems programming language".into(), tags: vec![] }, &embedder).await.unwrap();
+        store.create(TEST_USER, CreateMemory { content: "chocolate cake recipe with frosting".into(), tags: vec![] }, &embedder).await.unwrap();
 
-        let dupes = find_duplicates(&conn, 0.9).await.unwrap();
+        let dupes = find_duplicates(&conn, TEST_USER, 0.9).await.unwrap();
         assert!(dupes.is_empty());
     }
 
@@ -229,19 +240,19 @@ mod tests {
         let conn = crate::db::open_in_memory().await.unwrap();
 
         let ids = vec!["id_a".to_string(), "id_b".to_string()];
-        let suggestion_id = store_suggestion(&conn, "merge", &ids, "merge these two", "auto").await.unwrap();
+        let suggestion_id = store_suggestion(&conn, TEST_USER, "merge", &ids, "merge these two", "auto").await.unwrap();
         assert!(!suggestion_id.is_empty());
 
-        let all = list_suggestions(&conn, None).await.unwrap();
+        let all = list_suggestions(&conn, TEST_USER, None).await.unwrap();
         assert_eq!(all.len(), 1);
         assert_eq!(all[0].suggestion_type, "merge");
         assert_eq!(all[0].memory_ids, ids);
         assert_eq!(all[0].status, "pending");
 
-        let pending = list_suggestions(&conn, Some("pending")).await.unwrap();
+        let pending = list_suggestions(&conn, TEST_USER, Some("pending")).await.unwrap();
         assert_eq!(pending.len(), 1);
 
-        let applied = list_suggestions(&conn, Some("applied")).await.unwrap();
+        let applied = list_suggestions(&conn, TEST_USER, Some("applied")).await.unwrap();
         assert!(applied.is_empty());
     }
 
@@ -250,11 +261,11 @@ mod tests {
         let conn = crate::db::open_in_memory().await.unwrap();
 
         let ids = vec!["id_a".to_string()];
-        let suggestion_id = store_suggestion(&conn, "prune", &ids, "remove stale memory", "llm").await.unwrap();
+        let suggestion_id = store_suggestion(&conn, TEST_USER, "prune", &ids, "remove stale memory", "llm").await.unwrap();
 
-        update_suggestion_status(&conn, &suggestion_id, "applied").await.unwrap();
+        update_suggestion_status(&conn, TEST_USER, &suggestion_id, "applied").await.unwrap();
 
-        let all = list_suggestions(&conn, Some("applied")).await.unwrap();
+        let all = list_suggestions(&conn, TEST_USER, Some("applied")).await.unwrap();
         assert_eq!(all.len(), 1);
         assert_eq!(all[0].id, suggestion_id);
     }
@@ -264,9 +275,9 @@ mod tests {
         let conn = crate::db::open_in_memory().await.unwrap();
 
         let ids = vec!["id_a".to_string()];
-        let suggestion_id = store_suggestion(&conn, "prune", &ids, "remove it", "auto").await.unwrap();
+        let suggestion_id = store_suggestion(&conn, TEST_USER, "prune", &ids, "remove it", "auto").await.unwrap();
 
-        let result = update_suggestion_status(&conn, &suggestion_id, "invalid").await;
+        let result = update_suggestion_status(&conn, TEST_USER, &suggestion_id, "invalid").await;
         assert!(matches!(result, Err(Error::InvalidInput(_))));
     }
 
@@ -274,7 +285,7 @@ mod tests {
     async fn should_return_not_found_for_missing_suggestion() {
         let conn = crate::db::open_in_memory().await.unwrap();
 
-        let result = update_suggestion_status(&conn, "nonexistent", "applied").await;
+        let result = update_suggestion_status(&conn, TEST_USER, "nonexistent", "applied").await;
         assert!(matches!(result, Err(Error::NotFound(_))));
     }
 }

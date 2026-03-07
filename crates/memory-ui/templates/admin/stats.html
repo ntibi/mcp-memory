@@ -1,0 +1,11 @@
+{% extends "admin/layout.html" %}
+{% block content %}
+<section class="admin-section">
+    <h2>Stats</h2>
+    <div id="stats-content"
+         hx-get="/ui/admin/stats/data"
+         hx-trigger="load"
+         hx-swap="innerHTML">
+    </div>
+</section>
+{% endblock %}

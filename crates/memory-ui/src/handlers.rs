@@ -2,12 +2,17 @@ use axum::{
     extract::{Path, Query, State},
     response::{Html, IntoResponse, Response},
     http::StatusCode,
+    Extension,
 };
 use axum_htmx::HxRequest;
+use memory_core::users::AuthContext;
 use serde::Deserialize;
 
 use crate::UiState;
-use crate::templates::*;
+use crate::templates::{
+    CardEditTemplate, CardGridTemplate, CardTemplate, LayoutTemplate, LoginTemplate, MemoryCard,
+    TagSidebarTemplate, VoteButtonsTemplate,
+};
 
 #[derive(Deserialize, Default)]
 pub struct MemoryQuery {
@@ -26,6 +31,7 @@ pub async fn index(HxRequest(is_htmx): HxRequest) -> Response {
 
 pub async fn list_memories(
     State(state): State<UiState>,
+    Extension(auth): Extension<AuthContext>,
     HxRequest(is_htmx): HxRequest,
     Query(q): Query<MemoryQuery>,
 ) -> Response {
@@ -44,19 +50,19 @@ pub async fn list_memories(
 
     let memories = if let Some(ref query) = q.q {
         if query.is_empty() {
-            state.store.list(memory_core::memory::ListFilter {
+            state.store.list(&auth.user_id, memory_core::memory::ListFilter {
                 tags: tags.clone(),
                 limit: Some(limit + 1),
                 offset: Some(offset),
             }).await
         } else {
-            match state.store.recall(query, limit + 1, state.embedder.as_ref(), state.scorer.as_ref()).await {
+            match state.store.recall(&auth.user_id, query, limit + 1, state.embedder.as_ref(), state.scorer.as_ref()).await {
                 Ok(scored) => Ok(scored.into_iter().map(|s| s.memory).collect()),
                 Err(e) => Err(e),
             }
         }
     } else {
-        state.store.list(memory_core::memory::ListFilter {
+        state.store.list(&auth.user_id, memory_core::memory::ListFilter {
             tags: tags.clone(),
             limit: Some(limit + 1),
             offset: Some(offset),
@@ -93,11 +99,12 @@ pub async fn list_memories(
 
 pub async fn list_tags(
     State(state): State<UiState>,
+    Extension(auth): Extension<AuthContext>,
     Query(q): Query<MemoryQuery>,
 ) -> Response {
-    match state.store.list_tags().await {
+    match state.store.list_tags(&auth.user_id).await {
         Ok(tags) => {
-            let total_count = state.store.count().await.unwrap_or(0);
+            let total_count = state.store.count(&auth.user_id).await.unwrap_or(0);
             TagSidebarTemplate {
                 tags,
                 total_count,
@@ -118,16 +125,17 @@ pub struct VoteQuery {
 
 pub async fn vote_memory(
     State(state): State<UiState>,
+    Extension(auth): Extension<AuthContext>,
     Path(id): Path<String>,
     Query(params): Query<VoteQuery>,
 ) -> Response {
-    if let Err(e) = state.store.vote(&id, &params.vote).await {
+    if let Err(e) = state.store.vote(&auth.user_id, &id, &params.vote).await {
         tracing::error!("vote failed: {e}");
         return StatusCode::BAD_REQUEST.into_response();
     }
 
     let (helpful, harmful) = state.store.get_vote_counts(&id).await.unwrap_or((0, 0));
-    let memory = match state.store.get(&id).await {
+    let memory = match state.store.get(&auth.user_id, &id).await {
         Ok(m) => m,
         Err(_) => return StatusCode::NOT_FOUND.into_response(),
     };
@@ -139,9 +147,10 @@ pub async fn vote_memory(
 
 pub async fn delete_memory(
     State(state): State<UiState>,
+    Extension(auth): Extension<AuthContext>,
     Path(id): Path<String>,
 ) -> Response {
-    match state.store.delete(&id).await {
+    match state.store.delete(&auth.user_id, &id).await {
         Ok(()) => Html("").into_response(),
         Err(_) => StatusCode::NOT_FOUND.into_response(),
     }
@@ -149,9 +158,10 @@ pub async fn delete_memory(
 
 pub async fn edit_memory_form(
     State(state): State<UiState>,
+    Extension(auth): Extension<AuthContext>,
     Path(id): Path<String>,
 ) -> Response {
-    let memory = match state.store.get(&id).await {
+    let memory = match state.store.get(&auth.user_id, &id).await {
         Ok(m) => m,
         Err(_) => return StatusCode::NOT_FOUND.into_response(),
     };
@@ -169,10 +179,11 @@ pub struct UpdateForm {
 
 pub async fn update_memory(
     State(state): State<UiState>,
+    Extension(auth): Extension<AuthContext>,
     Path(id): Path<String>,
     axum::Form(form): axum::Form<UpdateForm>,
 ) -> Response {
-    if let Err(e) = state.store.update(&id, &form.content, state.embedder.as_ref()).await {
+    if let Err(e) = state.store.update(&auth.user_id, &id, &form.content, state.embedder.as_ref()).await {
         tracing::error!("update failed: {e}");
         return StatusCode::INTERNAL_SERVER_ERROR.into_response();
     }
@@ -183,10 +194,10 @@ pub async fn update_memory(
             .map(|s| s.trim().to_string())
             .filter(|s| !s.is_empty())
             .collect();
-        let _ = state.store.set_tags(&id, tags).await;
+        let _ = state.store.set_tags(&auth.user_id, &id, tags).await;
     }
 
-    let memory = match state.store.get(&id).await {
+    let memory = match state.store.get(&auth.user_id, &id).await {
         Ok(m) => m,
         Err(_) => return StatusCode::NOT_FOUND.into_response(),
     };
@@ -197,11 +208,16 @@ pub async fn update_memory(
     }.into_response()
 }
 
+pub async fn login_page() -> Response {
+    LoginTemplate.into_response()
+}
+
 pub async fn get_card(
     State(state): State<UiState>,
+    Extension(auth): Extension<AuthContext>,
     Path(id): Path<String>,
 ) -> Response {
-    let memory = match state.store.get(&id).await {
+    let memory = match state.store.get(&auth.user_id, &id).await {
         Ok(m) => m,
         Err(_) => return StatusCode::NOT_FOUND.into_response(),
     };

@@ -1,15 +1,59 @@
 use std::sync::Arc;
 
+use axum::{
+    extract::{Request, State},
+    response::IntoResponse,
+    Extension,
+};
 use clap::Parser;
-use memory_server::{api, auth, config, mcp};
+use memory_core::users::AuthContext;
+use memory_server::{admin, api, auth, config, mcp};
 use rmcp::transport::streamable_http_server::{
     StreamableHttpService, session::local::LocalSessionManager,
 };
+use tower::ServiceExt;
 use tracing_subscriber::EnvFilter;
 
 use api::AppState;
-use auth::ApiKey;
 use config::{Cli, Settings};
+
+#[derive(Clone)]
+struct McpState {
+    store: Arc<memory_core::memory::MemoryStore>,
+    embedder: Arc<dyn memory_core::embed::Embedder>,
+    scorer: Arc<memory_core::scoring::Scorer>,
+}
+
+async fn mcp_handler(
+    Extension(auth): Extension<AuthContext>,
+    State(state): State<McpState>,
+    request: Request,
+) -> impl IntoResponse {
+    let service = StreamableHttpService::new(
+        {
+            let store = state.store.clone();
+            let embedder = state.embedder.clone();
+            let scorer = state.scorer.clone();
+            let user_id = auth.user_id.clone();
+            move || {
+                Ok(mcp::MemoryMcp::new(
+                    store.clone(),
+                    embedder.clone(),
+                    scorer.clone(),
+                    user_id.clone(),
+                ))
+            }
+        },
+        Arc::new(LocalSessionManager::default()),
+        Default::default(),
+    );
+    match service.oneshot(request).await {
+        Ok(resp) => resp.into_response(),
+        Err(e) => {
+            (axum::http::StatusCode::INTERNAL_SERVER_ERROR, e.to_string()).into_response()
+        }
+    }
+}
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
@@ -55,23 +99,28 @@ async fn main() -> anyhow::Result<()> {
 
     let store = Arc::new(memory_core::memory::MemoryStore::new(conn.clone()));
 
+    let user_store = Arc::new(memory_core::users::UserStore::new(conn.clone()));
+    if let Some(key) = user_store.bootstrap(&settings.bootstrap_user).await? {
+        tracing::info!(
+            "bootstrapped admin user '{}' with api key: {}",
+            settings.bootstrap_user,
+            key.raw_key
+        );
+    }
+
     let app_state = AppState {
         store: store.clone(),
         embedder: embedder.clone(),
         scorer: scorer.clone(),
         conn: conn.clone(),
+        user_store: user_store.clone(),
     };
 
-    let mcp_service = StreamableHttpService::new(
-        {
-            let store = store.clone();
-            let embedder = embedder.clone();
-            let scorer = scorer.clone();
-            move || Ok(mcp::MemoryMcp::new(store.clone(), embedder.clone(), scorer.clone()))
-        },
-        Arc::new(LocalSessionManager::default()),
-        Default::default(),
-    );
+    let mcp_state = McpState {
+        store: store.clone(),
+        embedder: embedder.clone(),
+        scorer: scorer.clone(),
+    };
 
     let ui_state = memory_ui::UiState {
         store: store.clone(),
@@ -79,20 +128,44 @@ async fn main() -> anyhow::Result<()> {
         scorer: scorer.clone(),
     };
 
-    let api_key = ApiKey(settings.api_key.clone());
+    let admin_ui_state = memory_ui::AdminUiState {
+        user_store: user_store.clone(),
+        store: store.clone(),
+    };
+
+    let admin = axum::Router::new()
+        .nest("/api/v1/admin", admin::router().with_state(app_state.clone()))
+        .nest("/ui/admin", memory_ui::admin_router().with_state(admin_ui_state))
+        .layer(axum::middleware::from_fn(auth::admin_middleware))
+        .layer(axum::middleware::from_fn(auth::auth_middleware))
+        .layer(axum::Extension(user_store.clone()));
 
     let authed = axum::Router::new()
-        .nest_service("/mcp", mcp_service)
-        .layer(axum::middleware::from_fn(auth::bearer_auth))
-        .layer(axum::Extension(api_key));
-
-    let router = axum::Router::new()
-        .merge(authed)
+        .route(
+            "/mcp",
+            axum::routing::post(mcp_handler).with_state(mcp_state),
+        )
         .nest("/api/v1", api::router().with_state(app_state))
         .nest("/ui", memory_ui::router().with_state(ui_state))
+        .layer(axum::middleware::from_fn(auth::auth_middleware))
+        .layer(axum::Extension(user_store.clone()));
+
+    let router = axum::Router::new()
+        .merge(admin)
+        .merge(authed)
         .nest_service("/static", memory_ui::static_service())
-        .route("/", axum::routing::get(|| async { axum::response::Redirect::to("/ui") }))
-        .route("/version", axum::routing::get(|| async { option_env!("MEMORY_GIT_SHA").unwrap_or("unknown") }))
+        .route(
+            "/ui/login",
+            axum::routing::get(memory_ui::handlers::login_page),
+        )
+        .route(
+            "/",
+            axum::routing::get(|| async { axum::response::Redirect::to("/ui") }),
+        )
+        .route(
+            "/version",
+            axum::routing::get(|| async { option_env!("MEMORY_GIT_SHA").unwrap_or("unknown") }),
+        )
         .layer(tower_http::trace::TraceLayer::new_for_http());
 
     let listener = tokio::net::TcpListener::bind(&settings.listen_addr).await?;

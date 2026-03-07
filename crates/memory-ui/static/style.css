@@ -515,3 +515,151 @@ header {
     border-color: var(--border-hover);
     color: var(--text-primary);
 }
+
+.login-container {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 80vh;
+}
+.login-card {
+    padding: 2rem;
+    border-radius: var(--radius);
+    border: 1px solid var(--border);
+    max-width: 400px;
+    width: 100%;
+}
+.login-card h1 { margin: 0 0 1.5rem; text-align: center; }
+.login-card input {
+    width: 100%;
+    padding: 0.75rem;
+    margin-bottom: 1rem;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    background: var(--bg);
+    color: var(--text-primary);
+    font-family: inherit;
+    box-sizing: border-box;
+}
+.login-card button {
+    width: 100%;
+    padding: 0.75rem;
+    border: none;
+    border-radius: var(--radius-sm);
+    background: var(--accent);
+    color: white;
+    cursor: pointer;
+    font-family: inherit;
+}
+.login-card button:hover { background: var(--accent-hover); }
+.login-card .error { color: var(--danger); margin-top: 0.5rem; font-size: 0.8125rem; }
+.logout-btn {
+    background: none;
+    border: 1px solid var(--border);
+    color: var(--text-secondary);
+    padding: 0.25rem 0.75rem;
+    border-radius: var(--radius-sm);
+    cursor: pointer;
+    font-family: inherit;
+    font-size: 0.8125rem;
+}
+.logout-btn:hover {
+    background: var(--surface-hover);
+    color: var(--text-primary);
+}
+
+.admin-badge {
+    background: var(--accent);
+    color: white;
+    padding: 0.125rem 0.5rem;
+    border-radius: var(--radius-sm);
+    font-size: 0.75rem;
+    font-weight: 600;
+}
+.admin-nav { display: flex; gap: 0.5rem; }
+.nav-link {
+    color: var(--text-secondary);
+    text-decoration: none;
+    padding: 0.25rem 0.5rem;
+    border-radius: var(--radius-sm);
+    font-size: 0.875rem;
+}
+.nav-link:hover { color: var(--text-primary); background: var(--surface-hover); }
+.admin-main { max-width: 900px; margin: 0 auto; padding: 1.5rem; }
+.admin-section h2 { margin: 0 0 1rem; }
+.admin-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem; }
+.admin-inline-form { display: flex; gap: 0.5rem; align-items: center; }
+.admin-inline-form input {
+    padding: 0.375rem 0.75rem;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    background: var(--bg);
+    color: var(--text-primary);
+    font-family: inherit;
+    font-size: 0.8125rem;
+}
+.admin-inline-form button {
+    padding: 0.375rem 0.75rem;
+    border: none;
+    border-radius: var(--radius-sm);
+    background: var(--accent);
+    color: white;
+    cursor: pointer;
+    font-family: inherit;
+    font-size: 0.8125rem;
+    white-space: nowrap;
+}
+.admin-inline-form button:hover { background: var(--accent-hover); }
+.admin-card {
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 1rem;
+    margin-bottom: 0.75rem;
+    background: var(--surface);
+}
+.admin-card-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.5rem; }
+.admin-card-title { display: flex; align-items: center; gap: 0.5rem; }
+.admin-card-actions { display: flex; gap: 0.375rem; }
+.admin-card-meta { display: flex; gap: 1rem; margin-bottom: 0.75rem; }
+.text-muted { color: var(--text-secondary); font-size: 0.8125rem; }
+.admin-keys { border-top: 1px solid var(--border); padding-top: 0.75rem; }
+.admin-keys-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.5rem; }
+.admin-key-row {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+    padding: 0.375rem 0;
+    font-size: 0.8125rem;
+}
+.admin-key-row code { color: var(--text-secondary); font-size: 0.75rem; }
+.admin-empty { color: var(--text-secondary); font-style: italic; }
+.admin-table { width: 100%; border-collapse: collapse; }
+.admin-table th, .admin-table td {
+    padding: 0.5rem 0.75rem;
+    text-align: left;
+    border-bottom: 1px solid var(--border);
+}
+.admin-table th { font-weight: 600; font-size: 0.8125rem; color: var(--text-secondary); }
+.btn-sm {
+    padding: 0.25rem 0.5rem;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    background: var(--surface);
+    color: var(--text-primary);
+    cursor: pointer;
+    font-family: inherit;
+    font-size: 0.75rem;
+}
+.btn-sm:hover { background: var(--surface-hover); }
+.btn-secondary { border-color: var(--border); }
+.btn-danger { color: var(--danger); border-color: var(--danger); }
+.btn-danger:hover { background: var(--danger); color: white; }
+.input-sm {
+    padding: 0.25rem 0.5rem;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    background: var(--bg);
+    color: var(--text-primary);
+    font-family: inherit;
+    font-size: 0.75rem;
+}

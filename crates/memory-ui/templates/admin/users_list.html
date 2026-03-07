@@ -1,0 +1,44 @@
+{% if users.is_empty() %}
+<p class="admin-empty">No users yet.</p>
+{% else %}
+{% for user in users %}
+<div class="admin-card" id="user-{{ user.id }}">
+    <div class="admin-card-header">
+        <div class="admin-card-title">
+            <strong>{{ user.name }}</strong>
+            {% if admin_ids.contains(&user.id) %}<span class="admin-badge">Admin</span>{% endif %}
+        </div>
+        <div class="admin-card-actions">
+            {% if admin_ids.contains(&user.id) %}
+            <button class="btn-sm btn-secondary" onclick="toggleAdmin('{{ user.id }}', true)">Remove admin</button>
+            {% else %}
+            <button class="btn-sm btn-secondary" onclick="toggleAdmin('{{ user.id }}', false)">Make admin</button>
+            {% endif %}
+            <button class="btn-sm btn-danger" onclick="deleteUser('{{ user.id }}')">Delete</button>
+        </div>
+    </div>
+    <div class="admin-card-meta">
+        <span class="text-muted">{{ user.id }}</span>
+        <span class="text-muted">Created {{ user.created_at }}</span>
+    </div>
+    <div class="admin-keys">
+        <div class="admin-keys-header">
+            <strong>API Keys</strong>
+            <div class="admin-inline-form">
+                <input type="text" id="key-name-{{ user.id }}" placeholder="Key name" class="input-sm">
+                <button class="btn-sm" onclick="createKey('{{ user.id }}')">+ Key</button>
+            </div>
+        </div>
+        {% for key in keys[&user.id] %}
+        <div class="admin-key-row">
+            <span>{{ key.name }}{% if !key.name.is_empty() %} — {% endif %}<code>{{ key.id }}</code></span>
+            <span class="text-muted">{{ key.created_at }}{% if key.revoked_at.is_some() %} (revoked){% endif %}</span>
+            {% if key.revoked_at.is_none() %}
+            <button class="btn-sm btn-danger" onclick="revokeKey('{{ key.id }}')">Revoke</button>
+            {% endif %}
+        </div>
+        {% endfor %}
+    </div>
+</div>
+{% endfor %}
+{% endif %}

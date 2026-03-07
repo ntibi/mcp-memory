@@ -6,8 +6,8 @@ listen_addr = "127.0.0.1:8000"
 # Path to SQLite database file
 db_path = "memory.db"
 
-# API key for authenticating requests (empty = no auth)
-api_key = ""
+# Name for the bootstrap admin user (created on first startup)
+bootstrap_user = "admin"
 
 [embedding]
 # Embedding provider: "local" or "remote"

@@ -57,6 +57,7 @@ pub struct MemoryMcp {
     store: Arc<MemoryStore>,
     embedder: Arc<dyn Embedder>,
     scorer: Arc<Scorer>,
+    user_id: String,
     tool_router: ToolRouter<Self>,
 }
 
@@ -65,12 +66,14 @@ impl MemoryMcp {
         store: Arc<MemoryStore>,
         embedder: Arc<dyn Embedder>,
         scorer: Arc<Scorer>,
+        user_id: String,
     ) -> Self {
         let tool_router = Self::tool_router();
         Self {
             store,
             embedder,
             scorer,
+            user_id,
             tool_router,
         }
     }
@@ -145,12 +148,12 @@ impl MemoryMcp {
         };
         let memory = self
             .store
-            .create(input, self.embedder.as_ref())
+            .create(&self.user_id, input, self.embedder.as_ref())
             .await
             .map_err(|e| e.to_string())?;
         let related = self
             .store
-            .recall(&params.content, 5, self.embedder.as_ref(), self.scorer.as_ref())
+            .recall(&self.user_id, &params.content, 5, self.embedder.as_ref(), self.scorer.as_ref())
             .await
             .unwrap_or_default()
             .into_iter()
@@ -176,20 +179,20 @@ impl MemoryMcp {
             vec![]
         } else {
             self.store
-                .search_by_tags(&params.tags, half)
+                .search_by_tags(&self.user_id, &params.tags, half)
                 .await
                 .unwrap_or_default()
         };
 
         let universal = self
             .store
-            .search_by_tags(&["universal".into()], half / 4)
+            .search_by_tags(&self.user_id, &["universal".into()], half / 4)
             .await
             .unwrap_or_default();
 
         let semantic = self
             .store
-            .recall(&params.task, half, self.embedder.as_ref(), self.scorer.as_ref())
+            .recall(&self.user_id, &params.task, half, self.embedder.as_ref(), self.scorer.as_ref())
             .await
             .unwrap_or_default()
             .into_iter()
@@ -217,6 +220,7 @@ impl MemoryMcp {
         let results = self
             .store
             .recall(
+                &self.user_id,
                 &params.query,
                 n,
                 self.embedder.as_ref(),
@@ -234,12 +238,12 @@ impl MemoryMcp {
     ) -> Result<String, String> {
         let memory = self
             .store
-            .update(&params.id, &params.content, self.embedder.as_ref())
+            .update(&self.user_id, &params.id, &params.content, self.embedder.as_ref())
             .await
             .map_err(|e| e.to_string())?;
         if let Some(tags) = params.tags {
             self.store
-                .set_tags(&params.id, tags)
+                .set_tags(&self.user_id, &params.id, tags)
                 .await
                 .map_err(|e| e.to_string())?;
         }
@@ -252,7 +256,7 @@ impl MemoryMcp {
         Parameters(params): Parameters<DeleteMemoryParams>,
     ) -> Result<String, String> {
         self.store
-            .delete(&params.id)
+            .delete(&self.user_id, &params.id)
             .await
             .map_err(|e| e.to_string())?;
         Ok(format!("deleted memory {}", params.id))
@@ -266,7 +270,7 @@ impl MemoryMcp {
         let n = params.n.unwrap_or(20);
         let results = self
             .store
-            .search_by_tags(&params.tags, n)
+            .search_by_tags(&self.user_id, &params.tags, n)
             .await
             .map_err(|e| e.to_string())?;
         serde_json::to_string(&results).map_err(|e| e.to_string())

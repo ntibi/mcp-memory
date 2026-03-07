@@ -1,0 +1,57 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <script>
+        (function() {
+            var s = localStorage.getItem('theme');
+            var t = s || (matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light');
+            document.documentElement.setAttribute('data-theme', t);
+
+            var key = localStorage.getItem('api_key');
+            if (key) {
+                document.cookie = 'api_key=' + key + '; path=/; SameSite=Strict';
+                window.location.href = '/ui';
+            }
+        })();
+    </script>
+    <title>Memory - Login</title>
+    <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+    <main class="login-container">
+        <div class="login-card">
+            <h1>Memory</h1>
+            <form onsubmit="return handleLogin(event)">
+                <input type="text" id="api-key-input" placeholder="Paste your API key (mem_...)" autocomplete="off" autofocus>
+                <button type="submit">Log in</button>
+                <p id="login-error" class="error" style="display: none">Invalid API key</p>
+            </form>
+        </div>
+    </main>
+    <script>
+        async function handleLogin(e) {
+            e.preventDefault();
+            var key = document.getElementById('api-key-input').value.trim();
+            if (!key) return false;
+
+            try {
+                var resp = await fetch('/api/v1/health', {
+                    headers: { 'Authorization': 'Bearer ' + key }
+                });
+                if (resp.ok) {
+                    localStorage.setItem('api_key', key);
+                    document.cookie = 'api_key=' + key + '; path=/; SameSite=Strict';
+                    window.location.href = '/ui';
+                } else {
+                    document.getElementById('login-error').style.display = 'block';
+                }
+            } catch (err) {
+                document.getElementById('login-error').style.display = 'block';
+            }
+            return false;
+        }
+    </script>
+</body>
+</html>

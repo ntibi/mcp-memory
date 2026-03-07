@@ -1,6 +1,9 @@
+use std::collections::HashMap;
+
 use askama::Template;
 use askama_web::WebTemplate;
 use chrono::{DateTime, Utc};
+use memory_core::users::{ApiKey, User};
 
 pub struct MemoryCard {
     pub id: String,
@@ -86,4 +89,30 @@ pub struct TagSidebarTemplate {
 #[template(path = "fragments/card_edit.html")]
 pub struct CardEditTemplate {
     pub card: MemoryCard,
+}
+
+#[derive(Template, WebTemplate)]
+#[template(path = "login.html")]
+pub struct LoginTemplate;
+
+#[derive(Template, WebTemplate)]
+#[template(path = "admin/users.html")]
+pub struct AdminUsersPageTemplate;
+
+#[derive(Template, WebTemplate)]
+#[template(path = "admin/users_list.html")]
+pub struct AdminUsersListTemplate {
+    pub users: Vec<User>,
+    pub admin_ids: Vec<String>,
+    pub keys: HashMap<String, Vec<ApiKey>>,
+}
+
+#[derive(Template, WebTemplate)]
+#[template(path = "admin/stats.html")]
+pub struct AdminStatsPageTemplate;
+
+#[derive(Template, WebTemplate)]
+#[template(path = "admin/stats_data.html")]
+pub struct AdminStatsDataTemplate {
+    pub stats: Vec<(String, usize)>,
 }

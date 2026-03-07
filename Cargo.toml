@@ -29,7 +29,6 @@ ulid = "1"
 chrono = { version = "0.4", features = ["serde"] }
 reqwest = { version = "0.12", features = ["json"] }
 axum-test = "18"
-subtle = "2"
 anyhow = "1"
 fastembed = "5"
 memory-ui = { path = "crates/memory-ui" }
@@ -38,3 +37,6 @@ askama_web = { version = "0.15", features = ["axum-0.8"] }
 axum-htmx = "0.8"
 rust-embed = "8"
 axum-embed = "0.1"
+sha2 = "0.10"
+rand = "0.9"
+hex = "0.4"

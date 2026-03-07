@@ -6,7 +6,7 @@ use serde::Deserialize;
 pub struct Settings {
     pub listen_addr: String,
     pub db_path: String,
-    pub api_key: String,
+    pub bootstrap_user: String,
     pub embedding: EmbeddingConfig,
     pub scoring: ScoringConfig,
     pub curation: CurationConfig,
@@ -59,7 +59,7 @@ impl Settings {
         let mut builder = Config::builder()
             .set_default("listen_addr", "127.0.0.1:8000")?
             .set_default("db_path", "memory.db")?
-            .set_default("api_key", "")?
+            .set_default("bootstrap_user", "admin")?
             .set_default("embedding.provider", "local")?
             .set_default("embedding.model", "all-MiniLM-L6-v2")?
             .set_default("embedding.dimension", 384_i64)?
@@ -103,7 +103,7 @@ mod tests {
 
         assert_eq!(settings.listen_addr, "127.0.0.1:8000");
         assert_eq!(settings.db_path, "memory.db");
-        assert_eq!(settings.api_key, "");
+        assert_eq!(settings.bootstrap_user, "admin");
         assert_eq!(settings.embedding.provider, "local");
         assert_eq!(settings.embedding.model, "all-MiniLM-L6-v2");
         assert!(settings.embedding.api_key.is_none());
