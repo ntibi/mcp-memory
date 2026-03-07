@@ -181,7 +181,43 @@ fn migrate_v2(conn: &rusqlite::Connection) -> std::result::Result<(), rusqlite::
     Ok(())
 }
 
-const MIGRATIONS: &[Migration] = &[migrate_v0, migrate_v1, migrate_v2];
+fn migrate_v3(conn: &rusqlite::Connection) -> std::result::Result<(), rusqlite::Error> {
+    let backup: Vec<(String, String, Vec<u8>)> = {
+        let mut stmt = conn.prepare(
+            "SELECT me.memory_id, m.user_id, me.embedding \
+             FROM memory_embeddings me \
+             JOIN memories m ON me.memory_id = m.id",
+        )?;
+        stmt.query_map([], |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)))?
+            .collect::<std::result::Result<Vec<_>, _>>()?
+    };
+
+    conn.execute_batch("DROP TABLE memory_embeddings")?;
+
+    conn.execute(
+        "CREATE VIRTUAL TABLE memory_embeddings USING vec0(
+            memory_id   TEXT PRIMARY KEY,
+            user_id     TEXT partition key,
+            embedding   float[384] distance_metric=cosine
+        )",
+        [],
+    )?;
+
+    for (memory_id, user_id, embedding) in &backup {
+        conn.execute(
+            "INSERT INTO memory_embeddings (memory_id, user_id, embedding) VALUES (?1, ?2, ?3)",
+            rusqlite::params![memory_id, user_id, embedding],
+        )?;
+    }
+
+    info!(
+        count = backup.len(),
+        "migrated memory_embeddings to partitioned vec0 table with user_id partition key"
+    );
+    Ok(())
+}
+
+const MIGRATIONS: &[Migration] = &[migrate_v0, migrate_v1, migrate_v2, migrate_v3];
 
 fn run_migrations(conn: &rusqlite::Connection) -> std::result::Result<(), rusqlite::Error> {
     let current = get_schema_version(conn)?;

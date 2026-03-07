@@ -25,9 +25,8 @@ pub async fn find_duplicates(conn: &Connection, user_id: &str, threshold: f64) -
     let user_id = user_id.to_string();
     conn.call(move |conn| {
         let mut stmt = conn.prepare(
-            "SELECT me.memory_id, me.embedding FROM memory_embeddings me \
-             JOIN memories m ON me.memory_id = m.id \
-             WHERE m.user_id = ?1",
+            "SELECT memory_id, embedding FROM memory_embeddings \
+             WHERE user_id = ?1",
         )?;
 
         let rows = stmt.query_map(rusqlite::params![user_id], |row| {

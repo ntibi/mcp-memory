@@ -89,8 +89,8 @@ impl MemoryStore {
                 )?;
 
                 tx.execute(
-                    "INSERT INTO memory_embeddings (memory_id, embedding) VALUES (?1, ?2)",
-                    rusqlite::params![id_clone, embedding_bytes],
+                    "INSERT INTO memory_embeddings (memory_id, user_id, embedding) VALUES (?1, ?2, ?3)",
+                    rusqlite::params![id_clone, user_id, embedding_bytes],
                 )?;
 
                 for tag in &tags {
@@ -223,8 +223,8 @@ impl MemoryStore {
                 }
 
                 tx.execute(
-                    "UPDATE memory_embeddings SET embedding = ?1 WHERE memory_id = ?2",
-                    rusqlite::params![embedding_bytes, id],
+                    "UPDATE memory_embeddings SET embedding = ?1 WHERE memory_id = ?2 AND user_id = ?3",
+                    rusqlite::params![embedding_bytes, id, user_id],
                 )?;
 
                 let memory = load_memory_for_user(&tx, &id, &user_id)?;
@@ -466,7 +466,7 @@ impl MemoryStore {
     ) -> Result<Vec<ScoredMemory>> {
         let query_embedding = embedder.embed(query)?;
         let query_bytes: Vec<u8> = query_embedding.as_bytes().to_vec();
-        let fetch_limit = n * 3;
+        let fetch_limit = n * 3; // fetch more candidates for re-ranking
         let user_id = user_id.to_string();
         let now = Utc::now();
 
@@ -477,12 +477,13 @@ impl MemoryStore {
                     "SELECT memory_id, distance \
                      FROM memory_embeddings \
                      WHERE embedding MATCH ?1 \
-                     ORDER BY distance \
-                     LIMIT ?2",
+                     AND user_id = ?2 \
+                     AND k = ?3 \
+                     ORDER BY distance",
                 )?;
                 let candidates: Vec<(String, f64)> = stmt
                     .query_map(
-                        rusqlite::params![query_bytes, fetch_limit as i64],
+                        rusqlite::params![query_bytes, user_id, fetch_limit as i64],
                         |row| Ok((row.get::<_, String>(0)?, row.get::<_, f64>(1)?)),
                     )?
                     .collect::<std::result::Result<Vec<_>, _>>()?;
