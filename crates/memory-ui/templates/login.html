@@ -11,8 +11,16 @@
 
             var key = localStorage.getItem('api_key');
             if (key) {
-                document.cookie = 'api_key=' + key + '; path=/; SameSite=Strict';
-                window.location.href = '/ui';
+                fetch('/api/v1/health', { headers: { 'Authorization': 'Bearer ' + key } })
+                    .then(function(r) {
+                        if (r.ok) {
+                            document.cookie = 'api_key=' + key + '; path=/; SameSite=Strict';
+                            window.location.href = '/ui';
+                        } else {
+                            localStorage.removeItem('api_key');
+                            document.cookie = 'api_key=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT';
+                        }
+                    });
             }
         })();
     </script>
