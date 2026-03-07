@@ -115,37 +115,8 @@ impl MemoryStore {
         let id_for_err = id.clone();
         self.conn
             .call(move |conn| {
-                let mut stmt = conn.prepare(
-                    "SELECT id, user_id, content, created_at, updated_at FROM memories WHERE id = ?1 AND user_id = ?2",
-                )?;
-                let memory = stmt
-                    .query_row(rusqlite::params![id, user_id], |row| {
-                        Ok((
-                            row.get::<_, String>(0)?,
-                            row.get::<_, String>(1)?,
-                            row.get::<_, String>(2)?,
-                            row.get::<_, String>(3)?,
-                            row.get::<_, String>(4)?,
-                        ))
-                    })
-                    .optional()?;
-
-                let (id, user_id, content, created_at, updated_at) = memory
-                    .ok_or_else(|| rusqlite::Error::QueryReturnedNoRows)?;
-
-                let tags = load_tags(conn, &id)?;
-
-                let created_at = parse_datetime(&created_at)?;
-                let updated_at = parse_datetime(&updated_at)?;
-
-                Ok(Memory {
-                    id,
-                    user_id,
-                    content,
-                    created_at,
-                    updated_at,
-                    tags,
-                })
+                let memory = load_memory_for_user(conn, &id, &user_id)?;
+                Ok(memory)
             })
             .await
             .map_err(|e| match e {
@@ -227,36 +198,7 @@ impl MemoryStore {
                     rows.collect::<std::result::Result<Vec<_>, _>>()?
                 };
 
-                let mut memories = Vec::with_capacity(ids.len());
-                for id in ids {
-                    let mut stmt = conn.prepare(
-                        "SELECT user_id, content, created_at, updated_at FROM memories WHERE id = ?1",
-                    )?;
-                    let (mem_user_id, content, created_at_str, updated_at_str) = stmt.query_row(
-                        rusqlite::params![id],
-                        |row| {
-                            Ok((
-                                row.get::<_, String>(0)?,
-                                row.get::<_, String>(1)?,
-                                row.get::<_, String>(2)?,
-                                row.get::<_, String>(3)?,
-                            ))
-                        },
-                    )?;
-
-                    let tags = load_tags(conn, &id)?;
-                    let created_at = parse_datetime(&created_at_str)?;
-                    let updated_at = parse_datetime(&updated_at_str)?;
-
-                    memories.push(Memory {
-                        id,
-                        user_id: mem_user_id,
-                        content,
-                        created_at,
-                        updated_at,
-                        tags,
-                    });
-                }
+                let memories = load_memories(conn, &ids)?;
 
                 Ok(memories)
             })
@@ -297,34 +239,7 @@ impl MemoryStore {
                     rusqlite::params![embedding_bytes, id],
                 )?;
 
-                let mut stmt = tx.prepare(
-                    "SELECT user_id, content, created_at, updated_at FROM memories WHERE id = ?1",
-                )?;
-                let (mem_user_id, content, created_at_str, updated_at_str) = stmt.query_row(
-                    rusqlite::params![id],
-                    |row| {
-                        Ok((
-                            row.get::<_, String>(0)?,
-                            row.get::<_, String>(1)?,
-                            row.get::<_, String>(2)?,
-                            row.get::<_, String>(3)?,
-                        ))
-                    },
-                )?;
-                drop(stmt);
-
-                let tags = load_tags(&tx, &id)?;
-                let created_at = parse_datetime(&created_at_str)?;
-                let updated_at = parse_datetime(&updated_at_str)?;
-
-                let memory = Memory {
-                    id,
-                    user_id: mem_user_id,
-                    content,
-                    created_at,
-                    updated_at,
-                    tags,
-                };
+                let memory = load_memory_for_user(&tx, &id, &user_id)?;
 
                 tx.commit()?;
                 Ok(memory)
@@ -526,7 +441,7 @@ impl MemoryStore {
                 param_idx += 1;
                 let limit_param = param_idx;
                 let sql = format!(
-                    "SELECT m.id, m.user_id, m.content, m.created_at, m.updated_at \
+                    "SELECT m.id \
                      FROM memories m \
                      JOIN memory_tags mt ON m.id = mt.memory_id \
                      WHERE m.user_id = ?{user_id_param} AND mt.tag IN ({}) \
@@ -545,31 +460,10 @@ impl MemoryStore {
                 params.push(Box::new(tags.len() as i64));
                 params.push(Box::new(limit as i64));
                 let param_refs: Vec<&dyn rusqlite::types::ToSql> = params.iter().map(|p| p.as_ref()).collect();
-                let rows = stmt.query_map(&*param_refs, |row| {
-                    Ok((
-                        row.get::<_, String>(0)?,
-                        row.get::<_, String>(1)?,
-                        row.get::<_, String>(2)?,
-                        row.get::<_, String>(3)?,
-                        row.get::<_, String>(4)?,
-                    ))
-                })?;
+                let rows = stmt.query_map(&*param_refs, |row| row.get::<_, String>(0))?;
 
-                let raw: Vec<_> = rows.collect::<std::result::Result<Vec<_>, _>>()?;
-                let mut memories = Vec::with_capacity(raw.len());
-                for (id, mem_user_id, content, created_at_str, updated_at_str) in raw {
-                    let tags = load_tags(conn, &id)?;
-                    let created_at = parse_datetime(&created_at_str)?;
-                    let updated_at = parse_datetime(&updated_at_str)?;
-                    memories.push(Memory {
-                        id,
-                        user_id: mem_user_id,
-                        content,
-                        created_at,
-                        updated_at,
-                        tags,
-                    });
-                }
+                let ids: Vec<String> = rows.collect::<std::result::Result<Vec<_>, _>>()?;
+                let memories: Vec<Memory> = ids.iter().map(|id| load_memory(conn, id)).collect::<std::result::Result<Vec<_>, _>>()?;
                 Ok(memories)
             })
             .await
@@ -808,36 +702,7 @@ impl MemoryStore {
                     rows.collect::<std::result::Result<Vec<_>, _>>()?
                 };
 
-                let mut memories = Vec::with_capacity(ids.len());
-                for id in ids {
-                    let mut stmt = conn.prepare(
-                        "SELECT user_id, content, created_at, updated_at FROM memories WHERE id = ?1",
-                    )?;
-                    let (mem_user_id, content, created_at_str, updated_at_str) = stmt.query_row(
-                        rusqlite::params![id],
-                        |row| {
-                            Ok((
-                                row.get::<_, String>(0)?,
-                                row.get::<_, String>(1)?,
-                                row.get::<_, String>(2)?,
-                                row.get::<_, String>(3)?,
-                            ))
-                        },
-                    )?;
-
-                    let tags = load_tags(conn, &id)?;
-                    let created_at = parse_datetime(&created_at_str)?;
-                    let updated_at = parse_datetime(&updated_at_str)?;
-
-                    memories.push(Memory {
-                        id,
-                        user_id: mem_user_id,
-                        content,
-                        created_at,
-                        updated_at,
-                        tags,
-                    });
-                }
+                let memories = load_memories(conn, &ids)?;
 
                 Ok(memories)
             })
@@ -856,6 +721,44 @@ fn load_tags(conn: &rusqlite::Connection, memory_id: &str) -> std::result::Resul
     let mut stmt = conn.prepare("SELECT tag FROM memory_tags WHERE memory_id = ?1 ORDER BY tag")?;
     let rows = stmt.query_map(rusqlite::params![memory_id], |row| row.get(0))?;
     rows.collect()
+}
+
+fn load_memory_for_user(conn: &rusqlite::Connection, id: &str, user_id: &str) -> rusqlite::Result<Memory> {
+    let (uid, content, created_at_str, updated_at_str) = conn.query_row(
+        "SELECT user_id, content, created_at, updated_at FROM memories WHERE id = ?1 AND user_id = ?2",
+        rusqlite::params![id, user_id],
+        |row| Ok((
+            row.get::<_, String>(0)?,
+            row.get::<_, String>(1)?,
+            row.get::<_, String>(2)?,
+            row.get::<_, String>(3)?,
+        )),
+    )?;
+    let tags = load_tags(conn, id)?;
+    let created_at = parse_datetime(&created_at_str)?;
+    let updated_at = parse_datetime(&updated_at_str)?;
+    Ok(Memory { id: id.to_string(), user_id: uid, content, created_at, updated_at, tags })
+}
+
+fn load_memory(conn: &rusqlite::Connection, id: &str) -> rusqlite::Result<Memory> {
+    let (uid, content, created_at_str, updated_at_str) = conn.query_row(
+        "SELECT user_id, content, created_at, updated_at FROM memories WHERE id = ?1",
+        rusqlite::params![id],
+        |row| Ok((
+            row.get::<_, String>(0)?,
+            row.get::<_, String>(1)?,
+            row.get::<_, String>(2)?,
+            row.get::<_, String>(3)?,
+        )),
+    )?;
+    let tags = load_tags(conn, id)?;
+    let created_at = parse_datetime(&created_at_str)?;
+    let updated_at = parse_datetime(&updated_at_str)?;
+    Ok(Memory { id: id.to_string(), user_id: uid, content, created_at, updated_at, tags })
+}
+
+fn load_memories(conn: &rusqlite::Connection, ids: &[String]) -> rusqlite::Result<Vec<Memory>> {
+    ids.iter().map(|id| load_memory(conn, id)).collect()
 }
 
 use rusqlite::OptionalExtension;
