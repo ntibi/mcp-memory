@@ -173,7 +173,15 @@ fn migrate_v1(conn: &rusqlite::Connection) -> std::result::Result<(), rusqlite::
 
 type Migration = fn(&rusqlite::Connection) -> std::result::Result<(), rusqlite::Error>;
 
-const MIGRATIONS: &[Migration] = &[migrate_v0, migrate_v1];
+fn migrate_v2(conn: &rusqlite::Connection) -> std::result::Result<(), rusqlite::Error> {
+    conn.execute_batch(
+        "CREATE INDEX IF NOT EXISTS idx_memories_user_id ON memories(user_id);
+         CREATE INDEX IF NOT EXISTS idx_memory_tags_tag ON memory_tags(tag);",
+    )?;
+    Ok(())
+}
+
+const MIGRATIONS: &[Migration] = &[migrate_v0, migrate_v1, migrate_v2];
 
 fn run_migrations(conn: &rusqlite::Connection) -> std::result::Result<(), rusqlite::Error> {
     let current = get_schema_version(conn)?;
