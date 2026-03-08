@@ -17,5 +17,5 @@
                 hx-swap="outerHTML swap:500ms"
                 hx-confirm="Delete this memory?">delete</button>
     </div>
-    <div class="meta">{{ card.age }} &middot; confidence: {{ card.confidence }}</div>
+    <div class="meta">{{ card.age }} &middot; confidence: {{ card.confidence }}{% if !card.score.is_empty() %} &middot; score: {{ card.score }}{% endif %}</div>
 </article>

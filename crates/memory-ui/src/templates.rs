@@ -14,6 +14,7 @@ pub struct MemoryCard {
     pub confidence: String,
     pub age: String,
     pub created_at: DateTime<Utc>,
+    pub score: String,
 }
 
 impl MemoryCard {
@@ -34,7 +35,13 @@ impl MemoryCard {
             confidence,
             age,
             created_at: memory.created_at,
+            score: String::new(),
         }
+    }
+
+    pub fn with_score(mut self, score: f64) -> Self {
+        self.score = format!("{:.2}", score);
+        self
     }
 }
 

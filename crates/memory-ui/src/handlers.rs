@@ -47,37 +47,39 @@ pub async fn list_memories(
     let is_semantic = q.q.as_ref().is_some_and(|s| !s.is_empty());
     let tags = q.tag.as_deref().map(memory_core::tags::parse_comma_separated).unwrap_or_default();
 
-    let memories = if let Some(ref query) = q.q {
+    let scored_results = if let Some(ref query) = q.q {
         if query.is_empty() {
             state.store.list(&auth.user_id, memory_core::memory::ListFilter {
                 tags: tags.clone(),
                 limit: Some(limit + 1),
                 offset: Some(offset),
-            }).await
+            }).await.map(|mems| mems.into_iter().map(|m| (m, None)).collect::<Vec<_>>())
         } else {
-            match state.store.recall(&auth.user_id, query, limit + 1, state.embedder.as_ref(), state.scorer.as_ref()).await {
-                Ok(scored) => Ok(scored.into_iter().map(|s| s.memory).collect()),
-                Err(e) => Err(e),
-            }
+            state.store.recall(&auth.user_id, query, limit + 1, state.embedder.as_ref(), state.scorer.as_ref()).await
+                .map(|scored| scored.into_iter().map(|s| (s.memory, Some(s.score))).collect::<Vec<_>>())
         }
     } else {
         state.store.list(&auth.user_id, memory_core::memory::ListFilter {
             tags: tags.clone(),
             limit: Some(limit + 1),
             offset: Some(offset),
-        }).await
+        }).await.map(|mems| mems.into_iter().map(|m| (m, None)).collect::<Vec<_>>())
     };
 
-    match memories {
-        Ok(mut mems) => {
-            let has_more = !is_semantic && mems.len() > limit;
-            mems.truncate(limit);
+    match scored_results {
+        Ok(mut items) => {
+            let has_more = !is_semantic && items.len() > limit;
+            items.truncate(limit);
 
-            let ids: Vec<String> = mems.iter().map(|m| m.id.clone()).collect();
+            let ids: Vec<String> = items.iter().map(|(m, _)| m.id.clone()).collect();
             let votes = state.store.get_vote_counts_batch(&ids).await.unwrap_or_default();
-            let cards: Vec<MemoryCard> = mems.into_iter().map(|m| {
+            let cards: Vec<MemoryCard> = items.into_iter().map(|(m, score)| {
                 let (helpful, harmful) = votes.get(&m.id).copied().unwrap_or((0, 0));
-                MemoryCard::from_memory(m, helpful, harmful)
+                let card = MemoryCard::from_memory(m, helpful, harmful);
+                match score {
+                    Some(s) => card.with_score(s),
+                    None => card,
+                }
             }).collect();
 
             let next_cursor = (offset + cards.len()).to_string();
