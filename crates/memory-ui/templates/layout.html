@@ -132,9 +132,9 @@
             var tag = el.getAttribute('data-tag');
             var idx = currentTags.indexOf(tag);
             if (idx >= 0) {
-                currentTags.splice(idx, 1);
+                currentTags = [];
             } else {
-                currentTags.push(tag);
+                currentTags = [tag];
             }
             var url = tagUrl('/ui/memories');
             var pushUrl = tagUrl('/ui');
