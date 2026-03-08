@@ -5,22 +5,29 @@ use askama_web::WebTemplate;
 use chrono::{DateTime, Utc};
 use memory_core::users::{ApiKey, User};
 
+pub struct ScoreBreakdown {
+    pub relevance: String,
+    pub confidence: String,
+    pub recency: String,
+    pub total: String,
+}
+
 pub struct MemoryCard {
     pub id: String,
     pub content: String,
     pub tags: Vec<String>,
     pub helpful: u64,
     pub harmful: u64,
-    pub confidence: String,
+    pub vote_ratio: String,
     pub age: String,
     pub created_at: DateTime<Utc>,
-    pub score: String,
+    pub score: Option<ScoreBreakdown>,
 }
 
 impl MemoryCard {
     pub fn from_memory(memory: memory_core::memory::Memory, helpful: u64, harmful: u64) -> Self {
         let age = format_age(memory.created_at);
-        let confidence = if helpful + harmful == 0 {
+        let vote_ratio = if helpful + harmful == 0 {
             "no votes".to_string()
         } else {
             let ratio = (helpful as f64) / ((helpful + harmful) as f64);
@@ -32,15 +39,20 @@ impl MemoryCard {
             tags: memory.tags,
             helpful,
             harmful,
-            confidence,
+            vote_ratio,
             age,
             created_at: memory.created_at,
-            score: String::new(),
+            score: None,
         }
     }
 
-    pub fn with_score(mut self, score: f64) -> Self {
-        self.score = format!("{:.2}", score);
+    pub fn with_score(mut self, relevance: f64, confidence: f64, recency: f64, total: f64) -> Self {
+        self.score = Some(ScoreBreakdown {
+            relevance: format!("{:.2}", relevance),
+            confidence: format!("{:.2}", confidence),
+            recency: format!("{:.2}", recency),
+            total: format!("{:.2}", total),
+        });
         self
     }
 }

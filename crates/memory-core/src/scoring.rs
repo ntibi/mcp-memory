@@ -34,9 +34,13 @@ impl Scorer {
         wilson_score(helpful, harmful)
     }
 
+    pub fn recency(&self, age_days: f64) -> f64 {
+        (-2.0_f64.ln() / self.config.recency_half_life_days * age_days).exp()
+    }
+
     pub fn score(&self, relevance: f64, helpful: u64, harmful: u64, age_days: f64) -> f64 {
         let confidence = wilson_score(helpful, harmful);
-        let recency = (-2.0_f64.ln() / self.config.recency_half_life_days * age_days).exp();
+        let recency = self.recency(age_days);
 
         self.config.relevance_weight * relevance
             + self.config.confidence_weight * confidence

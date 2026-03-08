@@ -56,7 +56,7 @@ pub async fn list_memories(
             }).await.map(|mems| mems.into_iter().map(|m| (m, None)).collect::<Vec<_>>())
         } else {
             state.store.recall(&auth.user_id, query, limit + 1, state.embedder.as_ref(), state.scorer.as_ref()).await
-                .map(|scored| scored.into_iter().map(|s| (s.memory, Some(s.score))).collect::<Vec<_>>())
+                .map(|scored| scored.into_iter().map(|s| (s.memory, Some((s.relevance, s.confidence, s.recency, s.score)))).collect::<Vec<_>>())
         }
     } else {
         state.store.list(&auth.user_id, memory_core::memory::ListFilter {
@@ -77,7 +77,7 @@ pub async fn list_memories(
                 let (helpful, harmful) = votes.get(&m.id).copied().unwrap_or((0, 0));
                 let card = MemoryCard::from_memory(m, helpful, harmful);
                 match score {
-                    Some(s) => card.with_score(s),
+                    Some((rel, conf, rec, total)) => card.with_score(rel, conf, rec, total),
                     None => card,
                 }
             }).collect();

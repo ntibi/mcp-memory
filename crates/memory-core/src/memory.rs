@@ -45,6 +45,7 @@ pub struct ScoredMemory {
     pub memory: Memory,
     pub relevance: f64,
     pub confidence: f64,
+    pub recency: f64,
     pub score: f64,
 }
 
@@ -572,11 +573,13 @@ impl MemoryStore {
                 let relevance = 1.0 - distance;
                 let age_days = (now - memory.created_at).num_seconds() as f64 / 86400.0;
                 let confidence = scorer.wilson_score(helpful, harmful);
+                let recency = scorer.recency(age_days);
                 let score = scorer.score(relevance, helpful, harmful, age_days);
                 ScoredMemory {
                     memory,
                     relevance,
                     confidence,
+                    recency,
                     score,
                 }
             })

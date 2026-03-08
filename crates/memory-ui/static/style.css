@@ -400,6 +400,7 @@ header {
     letter-spacing: 0.01em;
 }
 
+
 /* ── HTMX indicators ───────────────────────── */
 .htmx-indicator {
     opacity: 0;
