@@ -14,6 +14,7 @@ use rmcp::{
     tool, tool_handler, tool_router,
 };
 use serde::{Deserialize, Deserializer, Serialize};
+use tracing::info;
 
 fn string_or_seq<'de, D>(deserializer: D) -> Result<Vec<String>, D::Error>
 where
@@ -173,7 +174,18 @@ impl MemoryMcp {
             stored: memory_core::memory::Memory,
             related: Vec<memory_core::memory::ScoredMemory>,
         }
-        serde_json::to_string(&StoreResult { stored: memory, related }).map_err(|e| e.to_string())
+        let result = StoreResult { stored: memory, related };
+        let response = serde_json::to_string(&result).map_err(|e| e.to_string())?;
+        let related_ids: Vec<&str> = result.related.iter().map(|s| s.memory.id.as_str()).collect();
+        info!(
+            user_id = %user_id,
+            tool = "store_memory",
+            stored_id = %result.stored.id,
+            ?related_ids,
+            response_bytes = response.len(),
+            "mcp tool call"
+        );
+        Ok(response)
     }
 
     #[tool(description = "Load context at the start of a session. Combines tag-based search (project + universal) with semantic recall of the current task, returning a deduplicated set of memories. Call this once at session start instead of separate search_by_tags + recall_memory calls.", annotations(read_only_hint = true, destructive_hint = false, open_world_hint = false))]
@@ -219,7 +231,17 @@ impl MemoryMcp {
         }
         result.truncate(n);
 
-        serde_json::to_string(&result).map_err(|e| e.to_string())
+        let response = serde_json::to_string(&result).map_err(|e| e.to_string())?;
+        let memory_ids: Vec<&str> = result.iter().map(|m| m.id.as_str()).collect();
+        info!(
+            user_id = %user_id,
+            tool = "session_start",
+            ?memory_ids,
+            memories_returned = result.len(),
+            response_bytes = response.len(),
+            "mcp tool call"
+        );
+        Ok(response)
     }
 
     #[tool(description = "Recall memories using semantic search. Finds stored memories most relevant to the query using vector similarity, ranked by relevance, confidence, and recency. Use this for open-ended lookups where you don't know the exact category — describe what you're looking for in natural language.", annotations(read_only_hint = true, destructive_hint = false, open_world_hint = false))]
@@ -241,7 +263,17 @@ impl MemoryMcp {
             )
             .await
             .map_err(|e| e.to_string())?;
-        serde_json::to_string(&results).map_err(|e| e.to_string())
+        let response = serde_json::to_string(&results).map_err(|e| e.to_string())?;
+        let memory_ids: Vec<&str> = results.iter().map(|s| s.memory.id.as_str()).collect();
+        info!(
+            user_id = %user_id,
+            tool = "recall_memory",
+            ?memory_ids,
+            memories_returned = results.len(),
+            response_bytes = response.len(),
+            "mcp tool call"
+        );
+        Ok(response)
     }
 
     #[tool(description = "Update an existing memory's content and optionally its tags. The embedding is recomputed from the new content. Use this when a memory is outdated or partially wrong but the core topic is the same.", annotations(read_only_hint = false, destructive_hint = false, idempotent_hint = true, open_world_hint = false))]
@@ -262,7 +294,15 @@ impl MemoryMcp {
                 .await
                 .map_err(|e| e.to_string())?;
         }
-        serde_json::to_string(&memory).map_err(|e| e.to_string())
+        let response = serde_json::to_string(&memory).map_err(|e| e.to_string())?;
+        info!(
+            user_id = %user_id,
+            tool = "update_memory",
+            updated_id = %params.id,
+            response_bytes = response.len(),
+            "mcp tool call"
+        );
+        Ok(response)
     }
 
     #[tool(description = "Delete a memory by ID. Use this when a memory is completely wrong or superseded. This is irreversible.", annotations(read_only_hint = false, destructive_hint = true, idempotent_hint = true, open_world_hint = false))]
@@ -276,7 +316,15 @@ impl MemoryMcp {
             .delete(&user_id, &params.id)
             .await
             .map_err(|e| e.to_string())?;
-        Ok(format!("deleted memory {}", params.id))
+        let response = format!("deleted memory {}", params.id);
+        info!(
+            user_id = %user_id,
+            tool = "delete_memory",
+            deleted_id = %params.id,
+            response_bytes = response.len(),
+            "mcp tool call"
+        );
+        Ok(response)
     }
 
     #[tool(description = "Search memories by exact tag match. Returns all memories tagged with the specified tag, ordered by creation time. Use this when you know the category of information you're looking for rather than searching by content.", annotations(read_only_hint = true, destructive_hint = false, open_world_hint = false))]
@@ -292,7 +340,17 @@ impl MemoryMcp {
             .search_by_tags(&user_id, &params.tags, n)
             .await
             .map_err(|e| e.to_string())?;
-        serde_json::to_string(&results).map_err(|e| e.to_string())
+        let response = serde_json::to_string(&results).map_err(|e| e.to_string())?;
+        let memory_ids: Vec<&str> = results.iter().map(|m| m.id.as_str()).collect();
+        info!(
+            user_id = %user_id,
+            tool = "search_by_tags",
+            ?memory_ids,
+            memories_returned = results.len(),
+            response_bytes = response.len(),
+            "mcp tool call"
+        );
+        Ok(response)
     }
 }
 
