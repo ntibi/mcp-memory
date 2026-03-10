@@ -1,0 +1,20 @@
+[package]
+name = "conversation-retrospective"
+edition.workspace = true
+version.workspace = true
+
+[[bin]]
+name = "retro"
+path = "src/main.rs"
+
+[dependencies]
+clap = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+reqwest = { workspace = true }
+tokio = { workspace = true }
+anyhow = { workspace = true }
+chrono = { workspace = true }
+tracing = { workspace = true }
+tracing-subscriber = { workspace = true }
+dirs = "6"
