@@ -232,6 +232,7 @@ fn run_migrations(conn: &rusqlite::Connection) -> std::result::Result<(), rusqli
     }
 
     conn.execute_batch("PRAGMA journal_mode=WAL;")?;
+    conn.execute_batch("PRAGMA busy_timeout=1000;")?;
     conn.execute_batch("PRAGMA foreign_keys=ON;")?;
 
     Ok(())
