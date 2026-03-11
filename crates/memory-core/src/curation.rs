@@ -710,7 +710,38 @@ pub async fn apply_suggestion(
     }
 
     update_suggestion_status(conn, user_id, suggestion_id, "applied").await?;
+    invalidate_overlapping_suggestions(conn, user_id, suggestion_id, &payload.memory_ids).await?;
     Ok(())
+}
+
+async fn invalidate_overlapping_suggestions(
+    conn: &Connection,
+    user_id: &str,
+    applied_id: &str,
+    memory_ids: &[String],
+) -> Result<()> {
+    let user_id = user_id.to_string();
+    let applied_id = applied_id.to_string();
+    let memory_ids_json = serde_json::to_string(memory_ids)
+        .map_err(|e| Error::Curation(format!("failed to serialize memory_ids: {e}")))?;
+
+    conn.call(move |conn| {
+        conn.execute(
+            "UPDATE curation_suggestions \
+             SET status = 'dismissed' \
+             WHERE user_id = ?1 \
+               AND id != ?2 \
+               AND status = 'pending' \
+               AND EXISTS ( \
+                   SELECT 1 FROM json_each(curation_suggestions.memory_ids) AS j \
+                   WHERE j.value IN (SELECT value FROM json_each(?3)) \
+               )",
+            rusqlite::params![user_id, applied_id, memory_ids_json],
+        )?;
+        Ok(())
+    })
+    .await
+    .map_err(Error::Database)
 }
 
 pub async fn store_dismissed_pair(
@@ -1223,6 +1254,55 @@ mod tests {
 
         let s = get_suggestion(&conn, TEST_USER, &suggestion_id).await.unwrap();
         assert_eq!(s.status, "applied");
+    }
+
+    #[tokio::test]
+    async fn should_invalidate_overlapping_suggestions_on_apply() {
+        let conn = crate::db::open_in_memory().await.unwrap();
+        let embedder = LocalEmbedder::new("all-MiniLM-L6-v2").unwrap();
+        let store = MemoryStore::new(conn.clone());
+
+        let m1 = store.create(TEST_USER, CreateMemory { content: "rust async patterns".into(), tags: vec!["rust".into()] }, &embedder).await.unwrap();
+        let m2 = store.create(TEST_USER, CreateMemory { content: "rust futures guide".into(), tags: vec!["rust".into()] }, &embedder).await.unwrap();
+        let m3 = store.create(TEST_USER, CreateMemory { content: "rust error handling".into(), tags: vec!["rust".into()] }, &embedder).await.unwrap();
+
+        let suggestion_a_json = serde_json::json!({
+            "action": "merge",
+            "memory_ids": [m1.id, m2.id],
+            "content": "merged m1+m2",
+            "tags": ["rust"],
+            "reasoning": "overlap"
+        }).to_string();
+        let suggestion_a_id = store_suggestion(&conn, TEST_USER, "merge", &[m1.id.clone(), m2.id.clone()], &suggestion_a_json, "llm").await.unwrap();
+
+        let suggestion_b_json = serde_json::json!({
+            "action": "merge",
+            "memory_ids": [m2.id, m3.id],
+            "content": "merged m2+m3",
+            "tags": ["rust"],
+            "reasoning": "overlap"
+        }).to_string();
+        let suggestion_b_id = store_suggestion(&conn, TEST_USER, "merge", &[m2.id.clone(), m3.id.clone()], &suggestion_b_json, "llm").await.unwrap();
+
+        let suggestion_c_json = serde_json::json!({
+            "action": "merge",
+            "memory_ids": [m3.id],
+            "content": "just m3",
+            "tags": ["rust"],
+            "reasoning": "solo"
+        }).to_string();
+        let suggestion_c_id = store_suggestion(&conn, TEST_USER, "merge", &[m3.id.clone()], &suggestion_c_json, "llm").await.unwrap();
+
+        apply_suggestion(&conn, &store, &embedder, TEST_USER, &suggestion_a_id).await.unwrap();
+
+        let sa = get_suggestion(&conn, TEST_USER, &suggestion_a_id).await.unwrap();
+        assert_eq!(sa.status, "applied");
+
+        let sb = get_suggestion(&conn, TEST_USER, &suggestion_b_id).await.unwrap();
+        assert_eq!(sb.status, "dismissed", "overlapping suggestion should be dismissed");
+
+        let sc = get_suggestion(&conn, TEST_USER, &suggestion_c_id).await.unwrap();
+        assert_eq!(sc.status, "pending", "non-overlapping suggestion should remain pending");
     }
 
     #[tokio::test]
