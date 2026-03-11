@@ -32,6 +32,3 @@ recency_half_life_days = 30.0
 interval_secs = 3600
 # Similarity threshold for duplicate detection
 similarity_threshold = 0.85
-
-# LLM provider/key/model are configured per-user via the curation settings UI
-# Supported providers: anthropic, openai, gemini
