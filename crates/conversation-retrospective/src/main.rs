@@ -2,9 +2,11 @@ mod claude;
 mod condense;
 mod display;
 mod filter;
+mod memory_extract;
 mod parser;
 mod state;
 mod store;
+mod vote;
 
 use std::path::{Path, PathBuf};
 
@@ -16,6 +18,7 @@ use clap::Parser;
 enum Cli {
     Run(RunArgs),
     Store(StoreArgs),
+    Vote(VoteArgs),
 }
 
 #[derive(clap::Args)]
@@ -34,6 +37,14 @@ struct StoreArgs {
     state: String,
 }
 
+#[derive(clap::Args)]
+struct VoteArgs {
+    #[arg(long)]
+    project: Option<String>,
+    #[arg(long, default_value = "vote-state.json")]
+    state: String,
+}
+
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
     tracing_subscriber::fmt::init();
@@ -41,6 +52,7 @@ async fn main() -> anyhow::Result<()> {
     match cli {
         Cli::Run(args) => run(args).await,
         Cli::Store(args) => store(args).await,
+        Cli::Vote(args) => run_vote_cmd(args).await,
     }
 }
 
@@ -231,10 +243,25 @@ async fn run(args: RunArgs) -> anyhow::Result<()> {
     Ok(())
 }
 
+async fn run_vote_cmd(args: VoteArgs) -> anyhow::Result<()> {
+    let memory_url =
+        std::env::var("MEMORY_URL").unwrap_or_else(|_| "http://localhost:8000".into());
+    let memory_key = std::env::var("MEMORY_API_KEY").context("MEMORY_API_KEY not set")?;
+    let state_path = PathBuf::from(&args.state);
+
+    vote::run_vote(
+        &state_path,
+        args.project.as_deref(),
+        &memory_url,
+        &memory_key,
+    )
+    .await
+}
+
 async fn store(args: StoreArgs) -> anyhow::Result<()> {
     let mut state = state::State::load(Path::new(&args.state))?;
     let memory_url =
-        std::env::var("MEMORY_URL").unwrap_or_else(|_| "http://localhost:3001".into());
+        std::env::var("MEMORY_URL").unwrap_or_else(|_| "http://localhost:8000".into());
     let memory_key = std::env::var("MEMORY_API_KEY").context("MEMORY_API_KEY not set")?;
     let client = reqwest::Client::new();
 

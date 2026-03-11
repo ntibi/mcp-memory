@@ -96,7 +96,7 @@ pub async fn extract_learnings(condensed: &str) -> Result<ExtractionResponse> {
     serde_json::from_str(&output).context("parsing extraction response")
 }
 
-async fn run_claude(prompt: &str, model: &str, json_schema: &serde_json::Value) -> Result<String> {
+pub async fn run_claude(prompt: &str, model: &str, json_schema: &serde_json::Value) -> Result<String> {
     let schema_str = serde_json::to_string(json_schema)?;
 
     let mut cmd = Command::new("claude");

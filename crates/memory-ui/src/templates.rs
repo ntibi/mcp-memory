@@ -42,8 +42,9 @@ impl MemoryCard {
         let vote_ratio = if helpful + harmful == 0 {
             "no votes".to_string()
         } else {
-            let ratio = (helpful as f64) / ((helpful + harmful) as f64);
-            format!("{:.0}%", ratio * 100.0)
+            let total = helpful + harmful;
+            let ratio = (helpful as f64) / (total as f64);
+            format!("{:.0}% ({total})", ratio * 100.0)
         };
         Self {
             id: memory.id,

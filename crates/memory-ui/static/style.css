@@ -275,7 +275,6 @@ header {
 }
 
 .memory-card .content {
-    flex: 1;
     max-height: 200px;
     overflow-y: auto;
     white-space: pre-wrap;
@@ -294,7 +293,9 @@ header {
     display: flex;
     flex-wrap: wrap;
     gap: 0.375rem;
-    margin: 0.875rem 0 0.75rem;
+    margin-top: auto;
+    margin-bottom: 0.75rem;
+    padding-top: 0.875rem;
 }
 
 .memory-card .tag,
@@ -378,7 +379,7 @@ header {
 
 .vote-section .count {
     font-size: 0.7rem;
-    min-width: 0.875rem;
+    min-width: 1.25rem;
     text-align: center;
     color: var(--text-muted);
     font-variant-numeric: tabular-nums;
