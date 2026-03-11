@@ -122,7 +122,10 @@ pub async fn execute_run(
         let prompt = build_prompt(&memories);
 
         match call_llm(&http, &settings.provider, &api_key, &settings.model, &prompt).await {
-            Ok(response) => {
+            Ok((response, usage)) => {
+                run.tokens_used += usage.total_tokens();
+                run.cost_usd += usage.estimate_cost(&settings.provider, &settings.model);
+
                 for suggestion in &response.suggestions {
                     let suggestion_json = serde_json::json!({
                         "action": suggestion.action,
@@ -288,14 +291,52 @@ struct LlmSuggestion {
     reasoning: String,
 }
 
+#[derive(Debug, Default)]
+struct LlmUsage {
+    input_tokens: i64,
+    output_tokens: i64,
+}
+
+impl LlmUsage {
+    fn total_tokens(&self) -> i64 {
+        self.input_tokens + self.output_tokens
+    }
+
+    fn estimate_cost(&self, provider: &str, model: &str) -> f64 {
+        let (input_per_m, output_per_m) = match provider {
+            "anthropic" => match model {
+                m if m.contains("haiku") => (0.25, 1.25),
+                m if m.contains("sonnet") => (3.0, 15.0),
+                m if m.contains("opus") => (15.0, 75.0),
+                _ => (3.0, 15.0),
+            },
+            "openai" => match model {
+                m if m.contains("gpt-4o-mini") => (0.15, 0.60),
+                m if m.contains("gpt-4o") => (2.50, 10.0),
+                m if m.contains("gpt-4") => (30.0, 60.0),
+                m if m.contains("o1") => (15.0, 60.0),
+                m if m.contains("o3") => (10.0, 40.0),
+                _ => (2.50, 10.0),
+            },
+            "gemini" => match model {
+                m if m.contains("flash") => (0.075, 0.30),
+                m if m.contains("pro") => (1.25, 5.0),
+                _ => (0.075, 0.30),
+            },
+            _ => (1.0, 1.0),
+        };
+        (self.input_tokens as f64 * input_per_m + self.output_tokens as f64 * output_per_m) / 1_000_000.0
+    }
+}
+
 async fn call_llm(
     http: &Client,
     provider: &str,
     api_key: &str,
     model: &str,
     prompt: &str,
-) -> anyhow::Result<SuggestionResponse> {
-    let text = match provider {
+) -> anyhow::Result<(SuggestionResponse, LlmUsage)> {
+    let (text, usage) = match provider {
         "anthropic" => call_anthropic(http, api_key, model, prompt).await?,
         "openai" => call_openai(http, api_key, model, prompt).await?,
         "gemini" => call_gemini(http, api_key, model, prompt).await?,
@@ -309,7 +350,7 @@ async fn call_llm(
 
     let response: SuggestionResponse = serde_json::from_str(text)
         .map_err(|e| anyhow::anyhow!("failed to parse llm response: {e}\nraw: {}", &text[..text.len().min(500)]))?;
-    Ok(response)
+    Ok((response, usage))
 }
 
 async fn call_anthropic(
@@ -317,7 +358,7 @@ async fn call_anthropic(
     api_key: &str,
     model: &str,
     prompt: &str,
-) -> anyhow::Result<String> {
+) -> anyhow::Result<(String, LlmUsage)> {
     let schema = build_schema();
     let system = format!(
         "{SYSTEM_PROMPT}\n\nYou MUST respond with valid JSON matching this schema:\n{}",
@@ -352,7 +393,12 @@ async fn call_anthropic(
         .and_then(|b| b["text"].as_str())
         .ok_or_else(|| anyhow::anyhow!("no text in anthropic response: {}", &text[..text.len().min(500)]))?;
 
-    Ok(content.to_string())
+    let usage = LlmUsage {
+        input_tokens: resp["usage"]["input_tokens"].as_i64().unwrap_or(0),
+        output_tokens: resp["usage"]["output_tokens"].as_i64().unwrap_or(0),
+    };
+
+    Ok((content.to_string(), usage))
 }
 
 async fn call_openai(
@@ -360,7 +406,7 @@ async fn call_openai(
     api_key: &str,
     model: &str,
     prompt: &str,
-) -> anyhow::Result<String> {
+) -> anyhow::Result<(String, LlmUsage)> {
     let body = serde_json::json!({
         "model": model,
         "messages": [
@@ -395,7 +441,12 @@ async fn call_openai(
         .as_str()
         .ok_or_else(|| anyhow::anyhow!("no content in openai response: {}", &text[..text.len().min(500)]))?;
 
-    Ok(content.to_string())
+    let usage = LlmUsage {
+        input_tokens: resp["usage"]["prompt_tokens"].as_i64().unwrap_or(0),
+        output_tokens: resp["usage"]["completion_tokens"].as_i64().unwrap_or(0),
+    };
+
+    Ok((content.to_string(), usage))
 }
 
 async fn call_gemini(
@@ -403,7 +454,7 @@ async fn call_gemini(
     api_key: &str,
     model: &str,
     prompt: &str,
-) -> anyhow::Result<String> {
+) -> anyhow::Result<(String, LlmUsage)> {
     let full_prompt = format!("{SYSTEM_PROMPT}\n\n{prompt}");
 
     let body = serde_json::json!({
@@ -435,7 +486,12 @@ async fn call_gemini(
         .as_str()
         .ok_or_else(|| anyhow::anyhow!("no text in gemini response: {}", &text[..text.len().min(500)]))?;
 
-    Ok(content.to_string())
+    let usage = LlmUsage {
+        input_tokens: resp["usageMetadata"]["promptTokenCount"].as_i64().unwrap_or(0),
+        output_tokens: resp["usageMetadata"]["candidatesTokenCount"].as_i64().unwrap_or(0),
+    };
+
+    Ok((content.to_string(), usage))
 }
 
 async fn finalize_run(

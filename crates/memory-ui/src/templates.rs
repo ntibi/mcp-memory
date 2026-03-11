@@ -7,6 +7,16 @@ use memory_core::curation::{CurationRun, CurationSettings, RunProgress};
 use memory_core::memory::Memory;
 use memory_core::users::{ApiKey, User};
 
+pub fn format_usd(value: &f64) -> String {
+    if *value == 0.0 {
+        "0.".to_string()
+    } else if *value < 0.01 {
+        format!("{:.4}", value)
+    } else {
+        format!("{:.2}", value)
+    }
+}
+
 pub struct ScoreBreakdown {
     pub relevance: String,
     pub confidence: String,

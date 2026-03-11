@@ -9,7 +9,7 @@
         <span>{{ p.processed_groups }}/{{ p.total_groups }} groups</span>
     </div>
     <div class="progress-meta">
-        {{ p.suggestions_created }} suggestions &middot; ${{ p.cost_usd }}
+        {{ p.suggestions_created }} suggestions &middot; ${{ crate::templates::format_usd(p.cost_usd) }}
     </div>
     <button class="btn-sm btn-danger"
             hx-post="/ui/curation/run/{{ p.run_id }}/cancel"
@@ -23,7 +23,7 @@
     <div class="last-run-info">
         Last run: <span class="status-badge status-{{ run.status }}">{{ run.status }}</span>
         &middot; {{ run.suggestions_created }} suggestions
-        &middot; ${{ run.cost_usd }}
+        &middot; ${{ crate::templates::format_usd(run.cost_usd) }}
         {% match run.completed_at %}{% when Some with (t) %}&middot; {{ t }}{% when None %}{% endmatch %}
     </div>
     {% when None %}

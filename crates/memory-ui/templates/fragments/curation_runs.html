@@ -18,7 +18,7 @@
             <td><span class="status-badge status-{{ run.status }}">{{ run.status }}</span></td>
             <td>{{ run.processed_groups }}/{{ run.total_groups }}</td>
             <td>{{ run.suggestions_created }}</td>
-            <td>${{ run.cost_usd }}</td>
+            <td>${{ crate::templates::format_usd(run.cost_usd) }}</td>
             <td class="text-muted">{{ run.started_at }}</td>
             <td class="text-muted">{% match run.completed_at %}{% when Some with (t) %}{{ t }}{% when None %}-{% endmatch %}</td>
         </tr>
