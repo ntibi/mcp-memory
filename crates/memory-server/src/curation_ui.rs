@@ -18,6 +18,8 @@ use memory_ui::templates::{
 };
 use serde::Deserialize;
 
+use reqwest::Client;
+
 use crate::scheduler::Scheduler;
 
 #[derive(Clone)]
@@ -33,6 +35,8 @@ pub fn router() -> Router<CurationUiState> {
     Router::new()
         .route("/", get(dashboard_page))
         .route("/settings", get(settings_page).put(update_settings))
+        .route("/check-model", post(check_model))
+        .route("/list-models", get(list_models))
         .route("/status", get(status_fragment))
         .route("/runs", get(runs_fragment))
         .route("/run", post(trigger_run))
@@ -64,6 +68,20 @@ async fn settings_page(
     CurationSettingsTemplate {
         settings,
         is_admin: auth.is_admin,
+        schedule_days,
+    }
+    .into_response()
+}
+
+fn build_settings_response(settings: curation::CurationSettings, is_admin: bool) -> Response {
+    let schedule_days: Vec<u8> = settings
+        .schedule_windows
+        .iter()
+        .flat_map(|w| w.days.iter().copied())
+        .collect();
+    CurationSettingsTemplate {
+        settings,
+        is_admin,
         schedule_days,
     }
     .into_response()
@@ -149,23 +167,136 @@ async fn update_settings(
     }
     settings.schedule_windows = windows;
 
+    if let Some(ref api_key) = settings.api_key {
+        if !api_key.starts_with("***") {
+            match fetch_models(api_key).await {
+                Ok(models) => {
+                    if !models.iter().any(|(id, _)| id == &settings.model) {
+                        return Html(format!(
+                            "<h1>Curation Settings</h1><div class=\"curation-error\">model '{}' not found in your Anthropic account</div>",
+                            settings.model
+                        )).into_response();
+                    }
+                }
+                Err(e) => {
+                    tracing::warn!(error = %e, "model validation failed, saving anyway");
+                }
+            }
+        }
+    }
+
     if let Err(e) = curation::upsert_settings(&state.conn, &settings).await {
         tracing::error!("failed to save curation settings: {e}");
         return StatusCode::INTERNAL_SERVER_ERROR.into_response();
     }
 
-    let schedule_days: Vec<u8> = settings
-        .schedule_windows
-        .iter()
-        .flat_map(|w| w.days.iter().copied())
-        .collect();
+    build_settings_response(settings, auth.is_admin)
+}
 
-    CurationSettingsTemplate {
-        settings,
-        is_admin: auth.is_admin,
-        schedule_days,
+async fn fetch_models(api_key: &str) -> anyhow::Result<Vec<(String, String)>> {
+    let http = Client::new();
+    let mut models = Vec::new();
+    let mut after_id: Option<String> = None;
+    loop {
+        let mut url = "https://api.anthropic.com/v1/models?limit=100".to_string();
+        if let Some(ref cursor) = after_id {
+            url.push_str(&format!("&after_id={cursor}"));
+        }
+        let resp = http
+            .get(&url)
+            .header("x-api-key", api_key)
+            .header("anthropic-version", "2023-06-01")
+            .send()
+            .await?;
+        if !resp.status().is_success() {
+            anyhow::bail!("anthropic api error: {}", resp.status());
+        }
+        let body: serde_json::Value = resp.json().await?;
+        let empty = vec![];
+        let data = body["data"].as_array().unwrap_or(&empty);
+        for m in data {
+            if let (Some(id), Some(name)) = (m["id"].as_str(), m["display_name"].as_str()) {
+                models.push((id.to_string(), name.to_string()));
+            }
+        }
+        if body["has_more"].as_bool() != Some(true) {
+            break;
+        }
+        after_id = body["last_id"].as_str().map(|s| s.to_string());
     }
-    .into_response()
+    models.sort_by(|a, b| a.1.cmp(&b.1));
+    Ok(models)
+}
+
+async fn resolve_api_key(
+    conn: &tokio_rusqlite::Connection,
+    user_id: &str,
+    form_key: Option<&str>,
+) -> Result<String, Response> {
+    if let Some(k) = form_key {
+        if !k.is_empty() && !k.starts_with("***") {
+            return Ok(k.to_string());
+        }
+    }
+    match curation::get_settings(conn, user_id).await {
+        Ok(s) => match s.api_key {
+            Some(k) => Ok(k),
+            None => Err(Html("<span class=\"check-error\">no API key configured</span>").into_response()),
+        },
+        Err(_) => Err(Html("<span class=\"check-error\">failed to load settings</span>").into_response()),
+    }
+}
+
+#[derive(Deserialize)]
+struct CheckModelForm {
+    model: String,
+    api_key: Option<String>,
+}
+
+async fn check_model(
+    State(state): State<CurationUiState>,
+    Extension(auth): Extension<AuthContext>,
+    axum::Form(form): axum::Form<CheckModelForm>,
+) -> Response {
+    let api_key = match resolve_api_key(&state.conn, &auth.user_id, form.api_key.as_deref()).await {
+        Ok(k) => k,
+        Err(r) => return r,
+    };
+
+    match fetch_models(&api_key).await {
+        Ok(models) => {
+            if models.iter().any(|(id, _)| id == &form.model) {
+                Html("<span class=\"check-ok\">valid</span>").into_response()
+            } else {
+                Html(format!("<span class=\"check-error\">model '{}' not found</span>", form.model)).into_response()
+            }
+        }
+        Err(e) => Html(format!("<span class=\"check-error\">{e}</span>")).into_response(),
+    }
+}
+
+async fn list_models(
+    State(state): State<CurationUiState>,
+    Extension(auth): Extension<AuthContext>,
+) -> Response {
+    let api_key = match curation::get_settings(&state.conn, &auth.user_id).await {
+        Ok(s) => match s.api_key {
+            Some(k) => k,
+            None => return axum::Json(serde_json::json!({"error": "no API key"})).into_response(),
+        },
+        Err(_) => return StatusCode::INTERNAL_SERVER_ERROR.into_response(),
+    };
+
+    match fetch_models(&api_key).await {
+        Ok(models) => {
+            let items: Vec<serde_json::Value> = models
+                .into_iter()
+                .map(|(id, name)| serde_json::json!({"id": id, "name": name}))
+                .collect();
+            axum::Json(serde_json::json!({"models": items})).into_response()
+        }
+        Err(e) => axum::Json(serde_json::json!({"error": e.to_string()})).into_response(),
+    }
 }
 
 async fn dashboard_page(Extension(auth): Extension<AuthContext>) -> Response {

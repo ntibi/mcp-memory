@@ -47,11 +47,9 @@
 
             <div class="form-group">
                 <label for="provider">LLM Provider</label>
-                <select id="provider" name="provider">
-                    <option value="anthropic" {% if settings.provider == "anthropic" %}selected{% endif %}>Anthropic</option>
-                    <option value="openai" {% if settings.provider == "openai" %}selected{% endif %}>OpenAI</option>
-                    <option value="gemini" {% if settings.provider == "gemini" %}selected{% endif %}>Gemini</option>
-                </select>
+                <input type="text" id="provider" name="provider" value="Anthropic" disabled>
+                <input type="hidden" name="provider" value="anthropic">
+                <span class="form-hint">only Anthropic is supported</span>
             </div>
 
             <div class="form-group">
@@ -64,7 +62,12 @@
 
             <div class="form-group">
                 <label for="model">Model</label>
-                <input type="text" id="model" name="model" value="{{ settings.model }}">
+                <div class="model-row">
+                    <select id="model" name="model">
+                        <option value="{{ settings.model }}" selected>{{ settings.model }}</option>
+                    </select>
+                    <button type="button" id="check-model-btn" class="btn-check">Check</button>
+                </div>
             </div>
 
             <div class="form-group">
@@ -141,6 +144,83 @@
                 e.detail.parameters['schedule_days'] = days.join(',');
             });
         });
+
+        (function() {
+            var select = document.getElementById('model');
+            var current = select.value;
+            var headers = {};
+            var key = localStorage.getItem('api_key');
+            if (key) headers['Authorization'] = 'Bearer ' + key;
+
+            fetch('/ui/curation/list-models', { headers: headers })
+                .then(function(r) { return r.json(); })
+                .then(function(data) {
+                    if (!data.models) return;
+                    select.innerHTML = '';
+                    var found = false;
+                    data.models.forEach(function(m) {
+                        var opt = document.createElement('option');
+                        opt.value = m.id;
+                        opt.textContent = m.name;
+                        if (m.id === current) {
+                            opt.selected = true;
+                            found = true;
+                        }
+                        select.appendChild(opt);
+                    });
+                    if (!found && current) {
+                        var opt = document.createElement('option');
+                        opt.value = current;
+                        opt.textContent = current;
+                        opt.selected = true;
+                        select.appendChild(opt);
+                    }
+                });
+        })();
+
+        (function() {
+            var btn = document.getElementById('check-model-btn');
+            var select = document.getElementById('model');
+
+            function resetBtn() {
+                btn.textContent = 'Check';
+                btn.className = 'btn-check';
+                btn.disabled = false;
+            }
+
+            select.addEventListener('change', resetBtn);
+
+            btn.addEventListener('click', function() {
+                var model = select.value;
+                var apiKey = document.getElementById('api_key').value;
+
+                btn.disabled = true;
+                btn.textContent = '...';
+                btn.className = 'btn-check';
+
+                var headers = { 'Content-Type': 'application/x-www-form-urlencoded' };
+                var key = localStorage.getItem('api_key');
+                if (key) headers['Authorization'] = 'Bearer ' + key;
+
+                fetch('/ui/curation/check-model', {
+                    method: 'POST',
+                    headers: headers,
+                    body: 'model=' + encodeURIComponent(model) + '&api_key=' + encodeURIComponent(apiKey)
+                })
+                .then(function(r) { return r.text(); })
+                .then(function(html) {
+                    var isValid = html.indexOf('check-ok') !== -1;
+                    btn.textContent = isValid ? 'Valid' : 'Invalid';
+                    btn.className = 'btn-check ' + (isValid ? 'btn-check-valid' : 'btn-check-invalid');
+                    btn.disabled = true;
+                })
+                .catch(function() {
+                    btn.textContent = 'Error';
+                    btn.className = 'btn-check btn-check-invalid';
+                    btn.disabled = true;
+                });
+            });
+        })();
     </script>
 </body>
 </html>

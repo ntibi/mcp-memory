@@ -1000,6 +1000,68 @@ header {
     color: var(--text-muted);
 }
 
+.model-row {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+.model-row select {
+    flex: 1;
+    padding: 0.5rem 0.75rem;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    background: var(--bg);
+    color: var(--text-primary);
+    font-family: inherit;
+    font-size: 0.85rem;
+    appearance: none;
+    -webkit-appearance: none;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%23999' stroke-width='2'%3E%3Cpolyline points='6 9 12 15 18 9'/%3E%3C/svg%3E");
+    background-repeat: no-repeat;
+    background-position: right 0.75rem center;
+    padding-right: 2rem;
+}
+
+.model-row select:focus {
+    outline: none;
+    border-color: var(--accent);
+}
+
+.btn-check {
+    padding: 0.5rem 0.75rem;
+    background: var(--surface);
+    color: var(--text-secondary);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    font-size: 0.85rem;
+    white-space: nowrap;
+    min-width: 4.5rem;
+    text-align: center;
+}
+
+.btn-check:hover {
+    border-color: var(--accent);
+    color: var(--text-primary);
+}
+
+.btn-check:disabled {
+    opacity: 1;
+    cursor: default;
+}
+
+.btn-check-valid {
+    background: var(--success, #22c55e);
+    border-color: var(--success, #22c55e);
+    color: #fff;
+}
+
+.btn-check-invalid {
+    background: var(--danger);
+    border-color: var(--danger);
+    color: #fff;
+}
+
 .settings-form fieldset {
     border: 1px solid var(--border);
     border-radius: var(--radius-sm);
