@@ -25,6 +25,7 @@
             {% endfor %}
         </div>
 
+        {% if !s.proposed_content.is_empty() %}
         <div class="suggestion-proposed">
             <h4>Proposed</h4>
             <div class="proposed-content">{{ s.proposed_content }}</div>
@@ -40,6 +41,7 @@
                 {% endfor %}
             </div>
         </div>
+        {% endif %}
 
         <div class="suggestion-actions">
             <button class="btn-primary"

@@ -704,19 +704,6 @@ pub async fn apply_suggestion(
                 store.delete(user_id, source_id).await?;
             }
         }
-        "supersede" => {
-            if payload.memory_ids.is_empty() {
-                return Err(Error::Curation("supersede requires at least one memory_id".into()));
-            }
-            let survivor_id = &payload.memory_ids[0];
-            store.update(user_id, survivor_id, &payload.content, embedder).await?;
-            store.set_tags(user_id, survivor_id, payload.tags).await?;
-            for source_id in &payload.memory_ids[1..] {
-                store.reassign_votes(source_id, survivor_id).await?;
-                store.reassign_access_log(source_id, survivor_id).await?;
-                store.delete(user_id, source_id).await?;
-            }
-        }
         other => {
             return Err(Error::Curation(format!("unknown suggestion action: {other}")));
         }
@@ -887,7 +874,7 @@ mod tests {
         let conn = crate::db::open_in_memory().await.unwrap();
 
         let ids = vec!["id_a".to_string()];
-        let suggestion_id = store_suggestion(&conn, TEST_USER, "prune", &ids, "remove stale memory", "llm").await.unwrap();
+        let suggestion_id = store_suggestion(&conn, TEST_USER, "merge", &ids, "remove stale memory", "llm").await.unwrap();
 
         update_suggestion_status(&conn, TEST_USER, &suggestion_id, "applied").await.unwrap();
 
@@ -901,7 +888,7 @@ mod tests {
         let conn = crate::db::open_in_memory().await.unwrap();
 
         let ids = vec!["id_a".to_string()];
-        let suggestion_id = store_suggestion(&conn, TEST_USER, "prune", &ids, "remove it", "auto").await.unwrap();
+        let suggestion_id = store_suggestion(&conn, TEST_USER, "merge", &ids, "remove it", "auto").await.unwrap();
 
         let result = update_suggestion_status(&conn, TEST_USER, &suggestion_id, "invalid").await;
         assert!(matches!(result, Err(Error::InvalidInput(_))));
@@ -1233,43 +1220,6 @@ mod tests {
         let (helpful, harmful) = store.get_vote_counts(&all[0].id).await.unwrap();
         assert_eq!(helpful, 3);
         assert_eq!(harmful, 0);
-
-        let s = get_suggestion(&conn, TEST_USER, &suggestion_id).await.unwrap();
-        assert_eq!(s.status, "applied");
-    }
-
-    #[tokio::test]
-    async fn should_supersede_memories_when_applying_supersede_suggestion() {
-        let conn = crate::db::open_in_memory().await.unwrap();
-        let embedder = LocalEmbedder::new("all-MiniLM-L6-v2").unwrap();
-        let store = MemoryStore::new(conn.clone());
-
-        let m1 = store.create(TEST_USER, CreateMemory { content: "original content a".into(), tags: vec!["old".into()] }, &embedder).await.unwrap();
-        let m2 = store.create(TEST_USER, CreateMemory { content: "original content b".into(), tags: vec!["old".into()] }, &embedder).await.unwrap();
-
-        store.vote(TEST_USER, &m2.id, "helpful").await.unwrap();
-
-        let suggestion_json = serde_json::json!({
-            "action": "supersede",
-            "memory_ids": [m1.id, m2.id],
-            "content": "superseded content",
-            "tags": ["new"],
-            "reasoning": "m1 is the canonical version"
-        }).to_string();
-
-        let memory_ids = vec![m1.id.clone(), m2.id.clone()];
-        let suggestion_id = store_suggestion(&conn, TEST_USER, "merge", &memory_ids, &suggestion_json, "llm").await.unwrap();
-
-        apply_suggestion(&conn, &store, &embedder, TEST_USER, &suggestion_id).await.unwrap();
-
-        let survivor = store.get(TEST_USER, &m1.id).await.unwrap();
-        assert_eq!(survivor.content, "superseded content");
-        assert_eq!(survivor.tags, vec!["new".to_string()]);
-
-        assert!(matches!(store.get(TEST_USER, &m2.id).await, Err(Error::NotFound(_))));
-
-        let (helpful, _) = store.get_vote_counts(&m1.id).await.unwrap();
-        assert_eq!(helpful, 1);
 
         let s = get_suggestion(&conn, TEST_USER, &suggestion_id).await.unwrap();
         assert_eq!(s.status, "applied");

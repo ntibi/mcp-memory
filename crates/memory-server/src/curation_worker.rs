@@ -223,17 +223,14 @@ async fn load_group_memories(
 const SYSTEM_PROMPT: &str = "\
 You are a memory curation assistant. Analyze groups of similar memories and suggest how to consolidate them.
 
-For each group, decide:
-- **merge**: combine multiple memories into one better version
-- **rewrite**: one memory replaces others (it's more recent or complete), rewrite it
-- **prune**: memories are redundant and should be removed
-
-If the memories are distinct enough to keep separate, return an empty suggestions array.
+For each group, either:
+- **merge**: combine multiple memories into one better version (preserving all useful information)
+- return an empty suggestions array if memories are distinct enough to keep separate
 
 Respond with a JSON object containing a \"suggestions\" array. Each suggestion has:
-- action: \"merge\", \"rewrite\", or \"prune\"
-- memory_ids: array of memory IDs involved
-- content: the proposed merged/replacement/pruned content
+- action: \"merge\"
+- memory_ids: array of all memory IDs being merged
+- content: the proposed consolidated content
 - tags: proposed tags for the result
 - reasoning: brief explanation";
 
@@ -261,7 +258,7 @@ fn build_schema() -> serde_json::Value {
                 "items": {
                     "type": "object",
                     "properties": {
-                        "action": { "type": "string", "enum": ["merge", "rewrite", "prune"] },
+                        "action": { "type": "string", "enum": ["merge"] },
                         "memory_ids": { "type": "array", "items": { "type": "string" } },
                         "content": { "type": "string" },
                         "tags": { "type": "array", "items": { "type": "string" } },

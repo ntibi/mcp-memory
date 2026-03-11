@@ -351,7 +351,7 @@ async fn should_dismiss_suggestion_via_api() {
     let suggestion_id = curation::store_suggestion(
         &ctx.conn,
         &ctx.user_id,
-        "rewrite",
+        "merge",
         &[id1.clone()],
         &suggestion_json,
         "llm",
