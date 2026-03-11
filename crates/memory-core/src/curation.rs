@@ -669,7 +669,6 @@ pub async fn get_suggestion(
 #[derive(Debug, Deserialize)]
 struct SuggestionPayload {
     action: String,
-    memory_ids: Vec<String>,
     content: String,
     tags: Vec<String>,
 }
@@ -698,9 +697,19 @@ pub async fn apply_suggestion(
                     embedder,
                 )
                 .await?;
-            for source_id in &payload.memory_ids {
+            for source_id in &suggestion.memory_ids {
                 store.reassign_votes(source_id, &new_memory.id).await?;
                 store.reassign_access_log(source_id, &new_memory.id).await?;
+                store.delete(user_id, source_id).await?;
+            }
+        }
+        "rewrite" => {
+            let primary = &suggestion.memory_ids[0];
+            store.update(user_id, primary, &payload.content, embedder).await?;
+            store.set_tags(user_id, primary, payload.tags).await?;
+            for source_id in &suggestion.memory_ids[1..] {
+                store.reassign_votes(source_id, primary).await?;
+                store.reassign_access_log(source_id, primary).await?;
                 store.delete(user_id, source_id).await?;
             }
         }
@@ -710,7 +719,7 @@ pub async fn apply_suggestion(
     }
 
     update_suggestion_status(conn, user_id, suggestion_id, "applied").await?;
-    invalidate_overlapping_suggestions(conn, user_id, suggestion_id, &payload.memory_ids).await?;
+    invalidate_overlapping_suggestions(conn, user_id, suggestion_id, &suggestion.memory_ids).await?;
     Ok(())
 }
 

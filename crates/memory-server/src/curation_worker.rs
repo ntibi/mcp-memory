@@ -228,10 +228,11 @@ You are a memory curation assistant. Analyze groups of similar memories and sugg
 
 For each group, either:
 - **merge**: combine multiple memories into one better version (preserving all useful information)
+- **rewrite**: rewrite and consolidate memories, keeping the first memory as the primary and absorbing the rest
 - return an empty suggestions array if memories are distinct enough to keep separate
 
 Respond with a JSON object containing a \"suggestions\" array. Each suggestion has:
-- action: \"merge\"
+- action: \"merge\" or \"rewrite\"
 - memory_ids: array of all memory IDs being merged
 - content: the proposed consolidated content
 - tags: proposed tags for the result
@@ -261,7 +262,7 @@ fn build_schema() -> serde_json::Value {
                 "items": {
                     "type": "object",
                     "properties": {
-                        "action": { "type": "string", "enum": ["merge"] },
+                        "action": { "type": "string", "enum": ["merge", "rewrite"] },
                         "memory_ids": { "type": "array", "items": { "type": "string" } },
                         "content": { "type": "string" },
                         "tags": { "type": "array", "items": { "type": "string" } },
