@@ -703,16 +703,6 @@ pub async fn apply_suggestion(
                 store.delete(user_id, source_id).await?;
             }
         }
-        "rewrite" => {
-            let primary = &suggestion.memory_ids[0];
-            store.update(user_id, primary, &payload.content, embedder).await?;
-            store.set_tags(user_id, primary, payload.tags).await?;
-            for source_id in &suggestion.memory_ids[1..] {
-                store.reassign_votes(source_id, primary).await?;
-                store.reassign_access_log(source_id, primary).await?;
-                store.delete(user_id, source_id).await?;
-            }
-        }
         other => {
             return Err(Error::Curation(format!("unknown suggestion action: {other}")));
         }

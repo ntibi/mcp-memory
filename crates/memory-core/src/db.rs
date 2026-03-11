@@ -66,7 +66,7 @@ fn migrate_v0(conn: &rusqlite::Connection) -> std::result::Result<(), rusqlite::
 
         CREATE TABLE IF NOT EXISTS curation_suggestions (
             id          TEXT PRIMARY KEY,
-            type        TEXT NOT NULL CHECK (type IN ('merge', 'prune', 'rewrite')),
+            type        TEXT NOT NULL,
             memory_ids  TEXT NOT NULL,
             suggestion  TEXT NOT NULL,
             source      TEXT NOT NULL CHECK (source IN ('auto', 'llm')),
