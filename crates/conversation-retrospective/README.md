@@ -11,7 +11,7 @@ Reads `~/.claude/projects/` conversation logs, filters for interesting ones, and
 cargo run -p conversation-retrospective -- run
 
 # filter to a specific project
-cargo run -p conversation-retrospective -- run --project anyshift
+cargo run -p conversation-retrospective -- run --project backend
 
 # custom state file
 cargo run -p conversation-retrospective -- run --state my-state.json
@@ -22,7 +22,21 @@ After `run` completes, edit `state.json` and set `"approved": true` on learnings
 ```
 # store approved learnings to memory MCP
 MEMORY_API_KEY=... cargo run -p conversation-retrospective -- store
+
+# vote on recalled memories (reinforcement)
+MEMORY_API_KEY=... cargo run -p conversation-retrospective -- vote
+
+# filter to a specific project
+MEMORY_API_KEY=... cargo run -p conversation-retrospective -- vote --project backend
 ```
+
+## Voting (reinforcement)
+
+The `vote` subcommand scans conversation logs for memory MCP tool calls (`recall_memory`, `session_start`, `search_by_tags`, etc.), extracts which memories were recalled, and uses an LLM (haiku) to judge whether each memory was helpful or harmful in context.
+
+Votes are submitted to the memory server's REST API (`POST /api/v1/memories/{id}/vote`). These votes feed into the confidence score (Wilson score lower bound) used during recall ranking, creating a reinforcement loop: useful memories surface more, noisy ones sink.
+
+Conversations are chunked at ~80K chars with overlap. When a memory appears in multiple chunks, evaluations are aggregated by majority vote (ties go to helpful). State is tracked in `vote-state.json` for incremental runs.
 
 ## Pipeline
 

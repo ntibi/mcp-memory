@@ -126,7 +126,8 @@ docker run -p 8000:8000 -e MEMORY__LISTEN_ADDR=0.0.0.0:8000 -v memory-data:/data
 
 ```
 crates/
-  memory-core/    — storage, embedding, scoring, curation
-  memory-server/  — axum server, MCP + REST + auth + config
-  memory-ui/      — web interface (askama templates + HTMX)
+  memory-core/                — storage, embedding, scoring, curation
+  memory-server/              — axum server, MCP + REST + auth + config
+  memory-ui/                  — web interface (askama templates + HTMX)
+  conversation-retrospective/ — extracts learnings from Claude Code logs + votes on recalled memories for reinforcement
 ```
