@@ -1,0 +1,31 @@
+{% if runs.is_empty() %}
+<p class="text-muted">No runs yet.</p>
+{% else %}
+<table class="admin-table">
+    <thead>
+        <tr>
+            <th>Status</th>
+            <th>Groups</th>
+            <th>Suggestions</th>
+            <th>Cost</th>
+            <th>Started</th>
+            <th>Completed</th>
+        </tr>
+    </thead>
+    <tbody>
+        {% for run in runs %}
+        <tr>
+            <td><span class="status-badge status-{{ run.status }}">{{ run.status }}</span></td>
+            <td>{{ run.processed_groups }}/{{ run.total_groups }}</td>
+            <td>{{ run.suggestions_created }}</td>
+            <td>${{ run.cost_usd }}</td>
+            <td class="text-muted">{{ run.started_at }}</td>
+            <td class="text-muted">{% match run.completed_at %}{% when Some with (t) %}{{ t }}{% when None %}-{% endmatch %}</td>
+        </tr>
+        {% if let Some(err) = run.error %}
+        <tr><td colspan="6" class="run-error">{{ err }}</td></tr>
+        {% endif %}
+        {% endfor %}
+    </tbody>
+</table>
+{% endif %}

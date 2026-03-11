@@ -7,7 +7,7 @@ use axum::{
 };
 use clap::Parser;
 use memory_core::users::AuthContext;
-use memory_server::{admin, api, auth, config, mcp};
+use memory_server::{admin, api, auth, config, curation_ui, curation_worker, mcp, scheduler};
 use rmcp::transport::streamable_http_server::{
     StreamableHttpService, StreamableHttpServerConfig,
     session::local::LocalSessionManager,
@@ -75,12 +75,22 @@ async fn main() -> anyhow::Result<()> {
         );
     }
 
+    let progress_map = curation_worker::new_progress_map();
+
+    let scheduler = scheduler::Scheduler::spawn(
+        conn.clone(),
+        store.clone(),
+        progress_map.clone(),
+    );
+
     let app_state = AppState {
         store: store.clone(),
         embedder: embedder.clone(),
         scorer: scorer.clone(),
         conn: conn.clone(),
         user_store: user_store.clone(),
+        scheduler,
+        progress_map,
     };
 
     let mcp_service = {
@@ -109,6 +119,14 @@ async fn main() -> anyhow::Result<()> {
         store: store.clone(),
     };
 
+    let curation_ui_state = curation_ui::CurationUiState {
+        conn: conn.clone(),
+        store: store.clone(),
+        embedder: embedder.clone(),
+        scheduler: app_state.scheduler.clone(),
+        progress_map: app_state.progress_map.clone(),
+    };
+
     let admin = axum::Router::new()
         .nest("/api/v1/admin", admin::router().with_state(app_state.clone()))
         .nest("/ui/admin", memory_ui::admin_router().with_state(admin_ui_state))
@@ -123,6 +141,7 @@ async fn main() -> anyhow::Result<()> {
                 .with_state(mcp_service),
         )
         .nest("/api/v1", api::router().with_state(app_state))
+        .nest("/ui/curation", curation_ui::router().with_state(curation_ui_state))
         .nest("/ui", memory_ui::router().with_state(ui_state))
         .layer(axum::middleware::from_fn(auth::auth_middleware))
         .layer(axum::Extension(user_store.clone()));

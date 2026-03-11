@@ -27,14 +27,6 @@ pub use memory_core::scoring::ScoringConfig;
 pub struct CurationConfig {
     pub interval_secs: u64,
     pub similarity_threshold: f64,
-    pub llm: Option<LlmConfig>,
-}
-
-#[derive(Debug, Deserialize, Clone)]
-pub struct LlmConfig {
-    pub api_key: String,
-    pub model: String,
-    pub api_url: String,
 }
 
 #[derive(Parser, Debug)]
@@ -108,7 +100,7 @@ mod tests {
         assert!((settings.scoring.recency_half_life_days - 30.0).abs() < f64::EPSILON);
         assert_eq!(settings.curation.interval_secs, 3600);
         assert!((settings.curation.similarity_threshold - 0.85).abs() < f64::EPSILON);
-        assert!(settings.curation.llm.is_none());
+        assert!((settings.curation.similarity_threshold - 0.85).abs() < f64::EPSILON);
     }
 
     #[test]

@@ -1,0 +1,58 @@
+{% if suggestions.is_empty() %}
+<p class="text-muted">No pending suggestions.</p>
+{% else %}
+<div class="suggestion-list">
+    {% for s in suggestions %}
+    <article class="suggestion-card" id="suggestion-{{ s.id }}">
+        <div class="suggestion-header">
+            <span class="action-badge action-{{ s.action }}">{{ s.action }}</span>
+            <span class="text-muted">{{ s.source_memories.len() }} memories</span>
+        </div>
+
+        <div class="suggestion-reasoning">{{ s.reasoning }}</div>
+
+        <div class="suggestion-sources">
+            <h4>Original</h4>
+            {% for m in s.source_memories %}
+            <div class="source-memory">
+                <div class="source-content">{{ m.content }}</div>
+                <div class="source-tags">
+                    {% for tag in m.tags %}
+                    <span class="tag">{{ tag }}</span>
+                    {% endfor %}
+                </div>
+            </div>
+            {% endfor %}
+        </div>
+
+        <div class="suggestion-proposed">
+            <h4>Proposed</h4>
+            <div class="proposed-content">{{ s.proposed_content }}</div>
+            <div class="proposed-tags">
+                {% for tag in s.unchanged_tags %}
+                <span class="tag">{{ tag }}</span>
+                {% endfor %}
+                {% for tag in s.added_tags %}
+                <span class="tag tag-added">{{ tag }}</span>
+                {% endfor %}
+                {% for tag in s.removed_tags %}
+                <span class="tag tag-removed">{{ tag }}</span>
+                {% endfor %}
+            </div>
+        </div>
+
+        <div class="suggestion-actions">
+            <button class="btn-primary"
+                    hx-post="/ui/curation/suggestions/{{ s.id }}/apply"
+                    hx-target="#suggestion-{{ s.id }}"
+                    hx-swap="outerHTML swap:300ms"
+                    hx-confirm="Apply this suggestion?">Apply</button>
+            <button class="btn-sm"
+                    hx-post="/ui/curation/suggestions/{{ s.id }}/dismiss"
+                    hx-target="#suggestion-{{ s.id }}"
+                    hx-swap="outerHTML swap:300ms">Dismiss</button>
+        </div>
+    </article>
+    {% endfor %}
+</div>
+{% endif %}

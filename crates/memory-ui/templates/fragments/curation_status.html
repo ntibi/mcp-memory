@@ -1,0 +1,37 @@
+{% match progress %}
+{% when Some with (p) %}
+<div class="curation-status running">
+    <div class="progress-bar">
+        <div class="progress-fill" style="width: {% if p.total_groups > 0 %}{{ p.processed_groups * 100 / p.total_groups }}{% else %}0{% endif %}%"></div>
+    </div>
+    <div class="progress-info">
+        <span>{{ p.current_group_label }}</span>
+        <span>{{ p.processed_groups }}/{{ p.total_groups }} groups</span>
+    </div>
+    <div class="progress-meta">
+        {{ p.suggestions_created }} suggestions &middot; ${{ p.cost_usd }}
+    </div>
+    <button class="btn-sm btn-danger"
+            hx-post="/ui/curation/run/{{ p.run_id }}/cancel"
+            hx-target="closest .curation-section div"
+            hx-swap="innerHTML">Cancel</button>
+</div>
+{% when None %}
+<div class="curation-status idle">
+    {% match last_run %}
+    {% when Some with (run) %}
+    <div class="last-run-info">
+        Last run: <span class="status-badge status-{{ run.status }}">{{ run.status }}</span>
+        &middot; {{ run.suggestions_created }} suggestions
+        &middot; ${{ run.cost_usd }}
+        {% match run.completed_at %}{% when Some with (t) %}&middot; {{ t }}{% when None %}{% endmatch %}
+    </div>
+    {% when None %}
+    <p class="text-muted">No curation runs yet.</p>
+    {% endmatch %}
+    <button class="btn-primary"
+            hx-post="/ui/curation/run"
+            hx-target="closest .curation-section div"
+            hx-swap="innerHTML">Run Now</button>
+</div>
+{% endmatch %}

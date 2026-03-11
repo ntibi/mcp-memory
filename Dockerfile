@@ -15,8 +15,8 @@ ENV ORT_LIB_LOCATION=/opt/onnxruntime-linux-x64-1.23.2/lib
 ENV ORT_PREFER_DYNAMIC_LINK=1
 COPY --from=planner /app/recipe.json recipe.json
 RUN cargo chef cook --release --recipe-path recipe.json
-ARG GIT_SHA=unknown
 COPY . .
+ARG GIT_SHA=unknown
 RUN MEMORY_GIT_SHA=${GIT_SHA} cargo build --release --bin memory-server
 
 FROM debian:trixie-slim

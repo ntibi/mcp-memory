@@ -1,4 +1,4 @@
-use std::sync::Mutex;
+use std::sync::{Mutex, OnceLock};
 
 use crate::error::{Error, Result};
 
@@ -9,7 +9,8 @@ pub trait Embedder: Send + Sync {
 }
 
 pub struct LocalEmbedder {
-    model: Mutex<fastembed::TextEmbedding>,
+    model: OnceLock<std::result::Result<Mutex<fastembed::TextEmbedding>, String>>,
+    model_type: fastembed::EmbeddingModel,
     dimension: usize,
 }
 
@@ -19,23 +20,33 @@ impl LocalEmbedder {
             "all-MiniLM-L6-v2" => fastembed::EmbeddingModel::AllMiniLML6V2,
             other => return Err(Error::Embedding(format!("unsupported model: {other}"))),
         };
-        let dimension = 384;
-        let model = fastembed::TextEmbedding::try_new(
-            fastembed::InitOptions::new(model_type).with_show_download_progress(true),
-        )
-        .map_err(|e| Error::Embedding(e.to_string()))?;
-
         Ok(Self {
-            model: Mutex::new(model),
-            dimension,
+            model: OnceLock::new(),
+            model_type,
+            dimension: 384,
         })
+    }
+
+    fn get_model(&self) -> Result<&Mutex<fastembed::TextEmbedding>> {
+        self.model
+            .get_or_init(|| {
+                tracing::info!("loading embedding model");
+                fastembed::TextEmbedding::try_new(
+                    fastembed::InitOptions::new(self.model_type.clone())
+                        .with_show_download_progress(true),
+                )
+                .map(Mutex::new)
+                .map_err(|e| e.to_string())
+            })
+            .as_ref()
+            .map_err(|e| Error::Embedding(e.clone()))
     }
 }
 
 impl Embedder for LocalEmbedder {
     fn embed(&self, text: &str) -> Result<Vec<f32>> {
         let mut model = self
-            .model
+            .get_model()?
             .lock()
             .map_err(|e| Error::Embedding(e.to_string()))?;
         let results = model
@@ -49,7 +60,7 @@ impl Embedder for LocalEmbedder {
 
     fn embed_batch(&self, texts: &[&str]) -> Result<Vec<Vec<f32>>> {
         let mut model = self
-            .model
+            .get_model()?
             .lock()
             .map_err(|e| Error::Embedding(e.to_string()))?;
         model

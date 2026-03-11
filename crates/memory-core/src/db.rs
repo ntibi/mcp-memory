@@ -217,7 +217,57 @@ fn migrate_v3(conn: &rusqlite::Connection) -> std::result::Result<(), rusqlite::
     Ok(())
 }
 
-const MIGRATIONS: &[Migration] = &[migrate_v0, migrate_v1, migrate_v2, migrate_v3];
+fn migrate_v4(conn: &rusqlite::Connection) -> std::result::Result<(), rusqlite::Error> {
+    conn.execute_batch(
+        "CREATE TABLE IF NOT EXISTS curation_settings (
+            user_id             TEXT PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
+            api_key             TEXT,
+            schedule_windows    TEXT NOT NULL DEFAULT '[]',
+            similarity_threshold REAL NOT NULL DEFAULT 0.85,
+            budget_limit_usd    REAL,
+            model               TEXT NOT NULL DEFAULT 'claude-sonnet-4-6',
+            enabled             INTEGER NOT NULL DEFAULT 0
+        );
+
+        CREATE TABLE IF NOT EXISTS curation_runs (
+            id                  TEXT PRIMARY KEY,
+            user_id             TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+            status              TEXT NOT NULL CHECK (status IN ('pending', 'running', 'completed', 'failed', 'cancelled')),
+            started_at          TEXT NOT NULL,
+            completed_at        TEXT,
+            total_groups        INTEGER NOT NULL DEFAULT 0,
+            processed_groups    INTEGER NOT NULL DEFAULT 0,
+            current_group_label TEXT,
+            suggestions_created INTEGER NOT NULL DEFAULT 0,
+            tokens_used         INTEGER NOT NULL DEFAULT 0,
+            cost_usd            REAL NOT NULL DEFAULT 0.0,
+            error               TEXT,
+            processed_memory_ids TEXT NOT NULL DEFAULT '[]'
+        );
+
+        CREATE INDEX IF NOT EXISTS idx_curation_runs_user_status ON curation_runs(user_id, status);
+
+        CREATE TABLE IF NOT EXISTS curation_dismissed_pairs (
+            user_id     TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+            memory_id_a TEXT NOT NULL,
+            memory_id_b TEXT NOT NULL,
+            dismissed_at TEXT NOT NULL,
+            PRIMARY KEY (user_id, memory_id_a, memory_id_b)
+        );",
+    )?;
+    Ok(())
+}
+
+fn migrate_v5(conn: &rusqlite::Connection) -> std::result::Result<(), rusqlite::Error> {
+    if !column_exists(conn, "curation_settings", "provider")? {
+        conn.execute_batch(
+            "ALTER TABLE curation_settings ADD COLUMN provider TEXT NOT NULL DEFAULT 'anthropic'",
+        )?;
+    }
+    Ok(())
+}
+
+const MIGRATIONS: &[Migration] = &[migrate_v0, migrate_v1, migrate_v2, migrate_v3, migrate_v4, migrate_v5];
 
 fn run_migrations(conn: &rusqlite::Connection) -> std::result::Result<(), rusqlite::Error> {
     let current = get_schema_version(conn)?;
@@ -293,6 +343,9 @@ mod tests {
         let expected = [
             "admins",
             "api_keys",
+            "curation_dismissed_pairs",
+            "curation_runs",
+            "curation_settings",
             "curation_suggestions",
             "memories",
             "memory_access_log",
@@ -304,6 +357,27 @@ mod tests {
         ];
 
         assert_eq!(tables, expected);
+    }
+
+    #[tokio::test]
+    async fn should_create_curation_tables_in_v4() {
+        let conn = open_in_memory().await.unwrap();
+
+        let tables: Vec<String> = conn
+            .call(|conn| {
+                let mut stmt = conn.prepare(
+                    "SELECT name FROM sqlite_master WHERE type='table' AND name LIKE 'curation_%' ORDER BY name",
+                )?;
+                let rows = stmt.query_map([], |row| row.get(0))?;
+                Ok(rows.collect::<std::result::Result<Vec<_>, _>>()?)
+            })
+            .await
+            .unwrap();
+
+        assert!(tables.contains(&"curation_dismissed_pairs".to_string()));
+        assert!(tables.contains(&"curation_runs".to_string()));
+        assert!(tables.contains(&"curation_settings".to_string()));
+        assert!(tables.contains(&"curation_suggestions".to_string()));
     }
 
     #[tokio::test]

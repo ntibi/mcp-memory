@@ -590,6 +590,36 @@ impl MemoryStore {
         Ok(scored)
     }
 
+    pub async fn reassign_votes(&self, from_memory_id: &str, to_memory_id: &str) -> Result<()> {
+        let from = from_memory_id.to_string();
+        let to = to_memory_id.to_string();
+        self.conn
+            .call(move |conn| {
+                conn.execute(
+                    "UPDATE memory_votes SET memory_id = ?2 WHERE memory_id = ?1",
+                    rusqlite::params![from, to],
+                )?;
+                Ok(())
+            })
+            .await
+            .map_err(Error::Database)
+    }
+
+    pub async fn reassign_access_log(&self, from_memory_id: &str, to_memory_id: &str) -> Result<()> {
+        let from = from_memory_id.to_string();
+        let to = to_memory_id.to_string();
+        self.conn
+            .call(move |conn| {
+                conn.execute(
+                    "UPDATE memory_access_log SET memory_id = ?2 WHERE memory_id = ?1",
+                    rusqlite::params![from, to],
+                )?;
+                Ok(())
+            })
+            .await
+            .map_err(Error::Database)
+    }
+
     pub async fn admin_delete(&self, id: &str) -> Result<()> {
         let id = id.to_string();
         self.conn

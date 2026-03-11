@@ -1,0 +1,7 @@
+{% if is_running %}
+<span class="curation-dot active" title="Curation running"></span>
+{% elif pending_count > 0 %}
+<span class="curation-dot pending" title="{{ pending_count }} pending suggestions">{{ pending_count }}</span>
+{% else %}
+<span class="curation-dot idle" title="Curation idle"></span>
+{% endif %}

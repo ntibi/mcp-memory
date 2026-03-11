@@ -22,6 +22,9 @@ thiserror.workspace = true
 chrono.workspace = true
 anyhow.workspace = true
 memory-ui.workspace = true
+dashmap.workspace = true
+tokio-util.workspace = true
+reqwest.workspace = true
 
 [dev-dependencies]
 axum-test.workspace = true

@@ -20,6 +20,8 @@ pub struct AppState {
     pub scorer: Arc<Scorer>,
     pub conn: tokio_rusqlite::Connection,
     pub user_store: Arc<UserStore>,
+    pub scheduler: Arc<tokio::sync::Mutex<crate::scheduler::Scheduler>>,
+    pub progress_map: crate::curation_worker::ProgressMap,
 }
 
 pub fn router() -> Router<AppState> {
@@ -40,6 +42,13 @@ pub fn router() -> Router<AppState> {
             "/curation/suggestions/{id}/dismiss",
             post(dismiss_suggestion_handler),
         )
+        .route(
+            "/curation/settings",
+            get(get_curation_settings).put(update_curation_settings),
+        )
+        .route("/curation/run", post(trigger_run))
+        .route("/curation/run/{id}/cancel", post(cancel_run))
+        .route("/curation/runs", get(list_curation_runs))
         .route("/health", get(health))
 }
 
@@ -198,11 +207,12 @@ async fn apply_suggestion_handler(
     Extension(auth): Extension<AuthContext>,
     Path(id): Path<String>,
 ) -> impl IntoResponse {
-    match memory_core::curation::update_suggestion_status(
+    match memory_core::curation::apply_suggestion(
         &state.conn,
+        &state.store,
+        state.embedder.as_ref(),
         &auth.user_id,
         &id,
-        "applied",
     )
     .await
     {
@@ -216,7 +226,12 @@ async fn dismiss_suggestion_handler(
     Extension(auth): Extension<AuthContext>,
     Path(id): Path<String>,
 ) -> impl IntoResponse {
-    match memory_core::curation::update_suggestion_status(
+    let suggestion = match memory_core::curation::get_suggestion(&state.conn, &auth.user_id, &id).await {
+        Ok(s) => s,
+        Err(e) => return error_response(&e),
+    };
+
+    if let Err(e) = memory_core::curation::update_suggestion_status(
         &state.conn,
         &auth.user_id,
         &id,
@@ -224,7 +239,145 @@ async fn dismiss_suggestion_handler(
     )
     .await
     {
-        Ok(()) => Json(json!({"status": "dismissed"})).into_response(),
+        return error_response(&e);
+    }
+
+    let memory_ids = &suggestion.memory_ids;
+    for i in 0..memory_ids.len() {
+        for j in (i + 1)..memory_ids.len() {
+            let _ = memory_core::curation::store_dismissed_pair(
+                &state.conn,
+                &auth.user_id,
+                &memory_ids[i],
+                &memory_ids[j],
+            )
+            .await;
+        }
+    }
+
+    Json(json!({"status": "dismissed"})).into_response()
+}
+
+fn mask_api_key(key: &Option<String>) -> serde_json::Value {
+    match key {
+        Some(k) if k.len() >= 3 => {
+            let suffix = &k[k.len() - 3..];
+            json!(format!("sk-...{suffix}"))
+        }
+        Some(_) => json!("sk-...***"),
+        None => json!(null),
+    }
+}
+
+async fn get_curation_settings(
+    State(state): State<AppState>,
+    Extension(auth): Extension<AuthContext>,
+) -> impl IntoResponse {
+    match memory_core::curation::get_settings(&state.conn, &auth.user_id).await {
+        Ok(settings) => Json(json!({
+            "user_id": settings.user_id,
+            "api_key": mask_api_key(&settings.api_key),
+            "schedule_windows": settings.schedule_windows,
+            "similarity_threshold": settings.similarity_threshold,
+            "budget_limit_usd": settings.budget_limit_usd,
+            "model": settings.model,
+            "enabled": settings.enabled,
+        }))
+        .into_response(),
+        Err(e) => error_response(&e),
+    }
+}
+
+#[derive(Deserialize)]
+struct UpdateCurationSettingsBody {
+    api_key: Option<Option<String>>,
+    schedule_windows: Option<Vec<memory_core::curation::ScheduleWindow>>,
+    similarity_threshold: Option<f64>,
+    budget_limit_usd: Option<Option<f64>>,
+    model: Option<String>,
+    enabled: Option<bool>,
+}
+
+async fn update_curation_settings(
+    State(state): State<AppState>,
+    Extension(auth): Extension<AuthContext>,
+    Json(body): Json<UpdateCurationSettingsBody>,
+) -> impl IntoResponse {
+    let mut settings = match memory_core::curation::get_settings(&state.conn, &auth.user_id).await {
+        Ok(s) => s,
+        Err(e) => return error_response(&e),
+    };
+
+    if let Some(key) = body.api_key {
+        settings.api_key = key;
+    }
+    if let Some(windows) = body.schedule_windows {
+        settings.schedule_windows = windows;
+    }
+    if let Some(threshold) = body.similarity_threshold {
+        settings.similarity_threshold = threshold;
+    }
+    if let Some(budget) = body.budget_limit_usd {
+        settings.budget_limit_usd = budget;
+    }
+    if let Some(model) = body.model {
+        settings.model = model;
+    }
+    if let Some(enabled) = body.enabled {
+        settings.enabled = enabled;
+    }
+
+    match memory_core::curation::upsert_settings(&state.conn, &settings).await {
+        Ok(()) => Json(json!({
+            "user_id": settings.user_id,
+            "api_key": mask_api_key(&settings.api_key),
+            "schedule_windows": settings.schedule_windows,
+            "similarity_threshold": settings.similarity_threshold,
+            "budget_limit_usd": settings.budget_limit_usd,
+            "model": settings.model,
+            "enabled": settings.enabled,
+        }))
+        .into_response(),
+        Err(e) => error_response(&e),
+    }
+}
+
+async fn trigger_run(
+    State(state): State<AppState>,
+    Extension(auth): Extension<AuthContext>,
+) -> impl IntoResponse {
+    let mut scheduler = state.scheduler.lock().await;
+    match scheduler.start_run(&auth.user_id).await {
+        Ok(run_id) => Json(json!({"run_id": run_id})).into_response(),
+        Err(e) => (StatusCode::BAD_REQUEST, Json(json!({"error": e.to_string()}))).into_response(),
+    }
+}
+
+async fn cancel_run(
+    State(state): State<AppState>,
+    Extension(auth): Extension<AuthContext>,
+    Path(id): Path<String>,
+) -> impl IntoResponse {
+    let mut scheduler = state.scheduler.lock().await;
+    match scheduler.cancel_run(&auth.user_id, &id).await {
+        Ok(()) => Json(json!({"status": "cancelling"})).into_response(),
+        Err(e) => (StatusCode::BAD_REQUEST, Json(json!({"error": e.to_string()}))).into_response(),
+    }
+}
+
+#[derive(Deserialize)]
+struct RunsQuery {
+    limit: Option<usize>,
+}
+
+async fn list_curation_runs(
+    State(state): State<AppState>,
+    Extension(auth): Extension<AuthContext>,
+    Query(query): Query<RunsQuery>,
+) -> impl IntoResponse {
+    let limit = query.limit.unwrap_or(20);
+    match memory_core::curation::list_runs(&state.conn, &auth.user_id, limit).await {
+        Ok(runs) => Json(json!(runs)).into_response(),
         Err(e) => error_response(&e),
     }
 }

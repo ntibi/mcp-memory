@@ -3,6 +3,8 @@ use std::collections::HashMap;
 use askama::Template;
 use askama_web::WebTemplate;
 use chrono::{DateTime, Utc};
+use memory_core::curation::{CurationRun, CurationSettings, RunProgress};
+use memory_core::memory::Memory;
 use memory_core::users::{ApiKey, User};
 
 pub struct ScoreBreakdown {
@@ -136,4 +138,56 @@ pub struct AdminStatsPageTemplate;
 #[template(path = "admin/stats_data.html")]
 pub struct AdminStatsDataTemplate {
     pub stats: Vec<(String, usize)>,
+}
+
+#[derive(Template, WebTemplate)]
+#[template(path = "curation/settings.html")]
+pub struct CurationSettingsTemplate {
+    pub settings: CurationSettings,
+    pub is_admin: bool,
+    pub schedule_days: Vec<u8>,
+}
+
+#[derive(Template, WebTemplate)]
+#[template(path = "curation/dashboard.html")]
+pub struct CurationDashboardTemplate {
+    pub is_admin: bool,
+}
+
+#[derive(Template, WebTemplate)]
+#[template(path = "fragments/curation_status.html")]
+pub struct CurationStatusTemplate {
+    pub progress: Option<RunProgress>,
+    pub last_run: Option<CurationRun>,
+}
+
+#[derive(Template, WebTemplate)]
+#[template(path = "fragments/curation_runs.html")]
+pub struct CurationRunsTemplate {
+    pub runs: Vec<CurationRun>,
+}
+
+pub struct SuggestionCard {
+    pub id: String,
+    pub action: String,
+    pub reasoning: String,
+    pub proposed_content: String,
+    pub proposed_tags: Vec<String>,
+    pub source_memories: Vec<Memory>,
+    pub added_tags: Vec<String>,
+    pub removed_tags: Vec<String>,
+    pub unchanged_tags: Vec<String>,
+}
+
+#[derive(Template, WebTemplate)]
+#[template(path = "fragments/curation_suggestions.html")]
+pub struct CurationSuggestionsTemplate {
+    pub suggestions: Vec<SuggestionCard>,
+}
+
+#[derive(Template, WebTemplate)]
+#[template(path = "fragments/curation_indicator.html")]
+pub struct CurationIndicatorTemplate {
+    pub is_running: bool,
+    pub pending_count: usize,
 }

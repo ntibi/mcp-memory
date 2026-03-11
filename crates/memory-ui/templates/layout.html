@@ -31,6 +31,10 @@
                        hx-push-url="true"
                        hx-indicator="#search-indicator">
                 <span id="search-indicator" class="htmx-indicator" aria-busy="true"></span>
+                <a href="/ui/curation" class="nav-link curation-link" aria-label="Curation">
+                    Curation
+                    <span hx-get="/ui/curation/indicator" hx-trigger="load, every 10s" hx-swap="innerHTML"></span>
+                </a>
                 {% if is_admin %}
                 <a href="/ui/admin" class="admin-btn" aria-label="Admin">Admin</a>
                 {% endif %}

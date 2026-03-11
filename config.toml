@@ -33,8 +33,5 @@ interval_secs = 3600
 # Similarity threshold for duplicate detection
 similarity_threshold = 0.85
 
-# Optional LLM configuration for curation
-# [curation.llm]
-# api_key = ""
-# model = "gpt-4"
-# api_url = "https://api.openai.com/v1"
+# LLM provider/key/model are configured per-user via the curation settings UI
+# Supported providers: anthropic, openai, gemini

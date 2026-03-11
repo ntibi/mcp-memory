@@ -1,0 +1,85 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <script>
+        (function() {
+            var s = localStorage.getItem('theme');
+            var t = s || (matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light');
+            document.documentElement.setAttribute('data-theme', t);
+        })();
+    </script>
+    <title>Curation</title>
+    <link rel="stylesheet" href="/static/style.css">
+    <script src="/static/htmx.min.js"></script>
+</head>
+<body>
+    <header>
+        <div class="header-inner">
+            <div class="header-left">
+                <a href="/ui" class="logo">Memory</a>
+            </div>
+            <div class="search-wrapper">
+                <a href="/ui/curation" class="nav-link active">Dashboard</a>
+                <a href="/ui/curation/settings" class="nav-link">Settings</a>
+                {% if is_admin %}
+                <a href="/ui/admin" class="admin-btn">Admin</a>
+                {% endif %}
+                <button class="theme-toggle" onclick="toggleTheme()" aria-label="Toggle theme">
+                    <svg class="icon-sun" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/>
+                    </svg>
+                    <svg class="icon-moon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/>
+                    </svg>
+                </button>
+            </div>
+        </div>
+    </header>
+    <main class="curation-main">
+        <h1>Curation</h1>
+
+        <section class="curation-section">
+            <h2>Status</h2>
+            <div hx-get="/ui/curation/status" hx-trigger="load, every 3s" hx-swap="innerHTML">
+            </div>
+        </section>
+
+        <section class="curation-section">
+            <h2>Suggestions</h2>
+            <div id="suggestions-list"
+                 hx-get="/ui/curation/suggestions"
+                 hx-trigger="load"
+                 hx-swap="innerHTML">
+            </div>
+        </section>
+
+        <section class="curation-section">
+            <h2>Run History</h2>
+            <div hx-get="/ui/curation/runs" hx-trigger="load, every 10s" hx-swap="innerHTML">
+            </div>
+        </section>
+    </main>
+    <script>
+        document.body.addEventListener('htmx:configRequest', function(e) {
+            var key = localStorage.getItem('api_key');
+            if (key) e.detail.headers['Authorization'] = 'Bearer ' + key;
+        });
+
+        document.body.addEventListener('htmx:responseError', function(e) {
+            if (e.detail.xhr.status === 401) {
+                localStorage.removeItem('api_key');
+                window.location.href = '/ui/login';
+            }
+        });
+
+        function toggleTheme() {
+            var cur = document.documentElement.getAttribute('data-theme');
+            var next = cur === 'dark' ? 'light' : 'dark';
+            document.documentElement.setAttribute('data-theme', next);
+            localStorage.setItem('theme', next);
+        }
+    </script>
+</body>
+</html>
