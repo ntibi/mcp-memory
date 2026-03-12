@@ -147,15 +147,12 @@ pub async fn vote_memory(
         return StatusCode::BAD_REQUEST.into_response();
     }
 
-    let (helpful, harmful) = state.store.get_vote_counts(&id).await.unwrap_or((0, 0));
-    let memory = match state.store.get(&auth.user_id, &id).await {
-        Ok(m) => m,
-        Err(_) => return StatusCode::NOT_FOUND.into_response(),
+    let card = match load_card(&state, &auth, &id).await {
+        Ok(c) => c,
+        Err(status) => return status.into_response(),
     };
 
-    VoteButtonsTemplate {
-        card: MemoryCard::from_memory(memory, helpful, harmful),
-    }.into_response()
+    VoteButtonsTemplate { card }.into_response()
 }
 
 pub async fn delete_memory(
@@ -174,12 +171,10 @@ pub async fn edit_memory_form(
     Extension(auth): Extension<AuthContext>,
     Path(id): Path<String>,
 ) -> Response {
-    let memory = match state.store.get(&auth.user_id, &id).await {
-        Ok(m) => m,
-        Err(_) => return StatusCode::NOT_FOUND.into_response(),
+    let card = match load_card(&state, &auth, &id).await {
+        Ok(c) => c,
+        Err(status) => return status.into_response(),
     };
-    let (helpful, harmful) = state.store.get_vote_counts(&id).await.unwrap_or((0, 0));
-    let card = MemoryCard::from_memory(memory, helpful, harmful);
 
     CardEditTemplate { card }.into_response()
 }
@@ -206,15 +201,12 @@ pub async fn update_memory(
         let _ = state.store.set_tags(&auth.user_id, &id, tags).await;
     }
 
-    let memory = match state.store.get(&auth.user_id, &id).await {
-        Ok(m) => m,
-        Err(_) => return StatusCode::NOT_FOUND.into_response(),
+    let card = match load_card(&state, &auth, &id).await {
+        Ok(c) => c,
+        Err(status) => return status.into_response(),
     };
-    let (helpful, harmful) = state.store.get_vote_counts(&id).await.unwrap_or((0, 0));
 
-    CardTemplate {
-        card: MemoryCard::from_memory(memory, helpful, harmful),
-    }.into_response()
+    CardTemplate { card }.into_response()
 }
 
 pub async fn login_page() -> Response {
@@ -227,31 +219,25 @@ pub async fn view_memory(
     HxRequest(is_htmx): HxRequest,
     Path(id): Path<String>,
 ) -> Response {
+    let card = match load_card(&state, &auth, &id).await {
+        Ok(c) => c,
+        Err(status) => return status.into_response(),
+    };
+
     if is_htmx {
-        return get_card_inner(&state, &auth, &id).await;
+        return CardTemplate { card }.into_response();
     }
 
-    let memory = match state.store.get(&auth.user_id, &id).await {
-        Ok(m) => m,
-        Err(_) => return StatusCode::NOT_FOUND.into_response(),
-    };
-    let (helpful, harmful) = state.store.get_vote_counts(&id).await.unwrap_or((0, 0));
-
     MemoryViewTemplate {
-        card: MemoryCard::from_memory(memory, helpful, harmful),
+        card,
         is_admin: auth.is_admin,
     }.into_response()
 }
 
-async fn get_card_inner(state: &UiState, auth: &AuthContext, id: &str) -> Response {
-    let memory = match state.store.get(&auth.user_id, id).await {
-        Ok(m) => m,
-        Err(_) => return StatusCode::NOT_FOUND.into_response(),
-    };
+async fn load_card(state: &UiState, auth: &AuthContext, id: &str) -> Result<MemoryCard, StatusCode> {
+    let memory = state.store.get(&auth.user_id, id).await.map_err(|_| StatusCode::NOT_FOUND)?;
     let (helpful, harmful) = state.store.get_vote_counts(id).await.unwrap_or((0, 0));
-    CardTemplate {
-        card: MemoryCard::from_memory(memory, helpful, harmful),
-    }.into_response()
+    Ok(MemoryCard::from_memory(memory, helpful, harmful))
 }
 
 pub async fn get_card(
@@ -259,12 +245,9 @@ pub async fn get_card(
     Extension(auth): Extension<AuthContext>,
     Path(id): Path<String>,
 ) -> Response {
-    let memory = match state.store.get(&auth.user_id, &id).await {
-        Ok(m) => m,
-        Err(_) => return StatusCode::NOT_FOUND.into_response(),
+    let card = match load_card(&state, &auth, &id).await {
+        Ok(c) => c,
+        Err(status) => return status.into_response(),
     };
-    let (helpful, harmful) = state.store.get_vote_counts(&id).await.unwrap_or((0, 0));
-    CardTemplate {
-        card: MemoryCard::from_memory(memory, helpful, harmful),
-    }.into_response()
+    CardTemplate { card }.into_response()
 }
