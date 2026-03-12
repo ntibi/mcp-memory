@@ -62,6 +62,13 @@ async fn main() -> anyhow::Result<()> {
         other => anyhow::bail!("unsupported embedding provider: {other}"),
     };
 
+    {
+        let embedder = embedder.clone();
+        std::thread::spawn(move || {
+            let _ = embedder.embed("warmup");
+        });
+    }
+
     let scorer = Arc::new(memory_core::scoring::Scorer::new(settings.scoring.clone()));
 
     let store = Arc::new(memory_core::memory::MemoryStore::new(conn.clone()));
