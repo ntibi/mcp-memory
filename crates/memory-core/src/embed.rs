@@ -33,9 +33,12 @@ impl LocalEmbedder {
                 tracing::info!("loading embedding model");
                 fastembed::TextEmbedding::try_new(
                     fastembed::InitOptions::new(self.model_type.clone())
-                        .with_show_download_progress(true),
+                        .with_show_download_progress(false),
                 )
-                .map(Mutex::new)
+                .map(|model| {
+                    tracing::info!("embedding model loaded");
+                    Mutex::new(model)
+                })
                 .map_err(|e| e.to_string())
             })
             .as_ref()
