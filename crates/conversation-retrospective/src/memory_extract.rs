@@ -18,8 +18,6 @@ pub struct TextSegment {
 
 #[derive(Debug)]
 pub struct ConversationWithMemories {
-    pub session_id: String,
-    pub project: String,
     pub segments: Vec<TextSegment>,
     pub memories: HashMap<String, RecalledMemory>,
 }
@@ -100,14 +98,7 @@ impl ConversationWithMemories {
 
 pub fn extract_memories_from_conversation(
     path: &Path,
-    project: &str,
 ) -> Result<Option<ConversationWithMemories>> {
-    let session_id = path
-        .file_stem()
-        .and_then(|s| s.to_str())
-        .map(|s| s.to_string())
-        .with_context(|| format!("extracting session id from: {}", path.display()))?;
-
     let content = std::fs::read_to_string(path)
         .with_context(|| format!("reading conversation file: {}", path.display()))?;
 
@@ -262,8 +253,6 @@ pub fn extract_memories_from_conversation(
     }
 
     Ok(Some(ConversationWithMemories {
-        session_id,
-        project: project.to_string(),
         segments,
         memories,
     }))

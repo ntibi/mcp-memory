@@ -320,7 +320,7 @@ pub async fn run_vote(
                 clean_name, handled, total
             );
 
-            let conv = match memory_extract::extract_memories_from_conversation(path, project_name)
+            let conv = match memory_extract::extract_memories_from_conversation(path)
             {
                 Ok(Some(c)) => c,
                 Ok(None) => {

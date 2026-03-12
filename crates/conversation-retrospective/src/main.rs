@@ -124,7 +124,7 @@ async fn run(args: RunArgs) -> anyhow::Result<()> {
                 .unwrap_or("")
                 .to_string();
 
-            let conv = match parser::parse_conversation(path, project_name) {
+            let conv = match parser::parse_conversation(path) {
                 Ok(c) => c,
                 Err(e) => {
                     tracing::warn!(session = %session_id, error = %e, "failed to parse conversation");

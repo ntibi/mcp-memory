@@ -8,14 +8,10 @@ pub struct LogEntry {
     #[serde(rename = "type")]
     pub entry_type: String,
     pub message: Option<Message>,
-    pub timestamp: Option<String>,
-    #[serde(rename = "sessionId")]
-    pub session_id: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]
 pub struct Message {
-    pub role: Option<String>,
     pub content: Option<serde_json::Value>,
 }
 
@@ -27,10 +23,7 @@ pub struct ConversationMessage {
 
 #[derive(Debug)]
 pub struct Conversation {
-    pub session_id: String,
-    pub project: String,
     pub messages: Vec<ConversationMessage>,
-    pub timestamp: Option<String>,
 }
 
 pub fn discover_projects(base: &Path) -> Result<Vec<(String, Vec<PathBuf>)>> {
@@ -87,18 +80,11 @@ pub fn discover_projects(base: &Path) -> Result<Vec<(String, Vec<PathBuf>)>> {
     Ok(result)
 }
 
-pub fn parse_conversation(path: &Path, project: &str) -> Result<Conversation> {
-    let session_id = path
-        .file_stem()
-        .and_then(|s| s.to_str())
-        .map(|s| s.to_string())
-        .with_context(|| format!("extracting session id from: {}", path.display()))?;
-
+pub fn parse_conversation(path: &Path) -> Result<Conversation> {
     let content = std::fs::read_to_string(path)
         .with_context(|| format!("reading conversation file: {}", path.display()))?;
 
     let mut messages = Vec::new();
-    let mut timestamp = None;
 
     for (i, line) in content.lines().enumerate() {
         let line = line.trim();
@@ -113,10 +99,6 @@ pub fn parse_conversation(path: &Path, project: &str) -> Result<Conversation> {
                 continue;
             }
         };
-
-        if timestamp.is_none() {
-            timestamp = entry.timestamp.clone();
-        }
 
         let role = match entry.entry_type.as_str() {
             "user" | "assistant" => entry.entry_type.as_str(),
@@ -140,12 +122,7 @@ pub fn parse_conversation(path: &Path, project: &str) -> Result<Conversation> {
         });
     }
 
-    Ok(Conversation {
-        session_id,
-        project: project.to_string(),
-        messages,
-        timestamp,
-    })
+    Ok(Conversation { messages })
 }
 
 fn extract_text(content: &serde_json::Value) -> String {
