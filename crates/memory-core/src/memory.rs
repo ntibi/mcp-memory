@@ -670,15 +670,15 @@ impl MemoryStore {
             })
     }
 
-    pub async fn admin_stats(&self) -> Result<Vec<(String, usize)>> {
+    pub async fn admin_stats(&self) -> Result<Vec<(String, String, usize)>> {
         self.conn
             .call(|conn| {
                 let mut stmt = conn.prepare(
-                    "SELECT user_id, COUNT(*) as cnt FROM memories GROUP BY user_id ORDER BY cnt DESC",
+                    "SELECT m.user_id, u.name, COUNT(*) as cnt FROM memories m JOIN users u ON m.user_id = u.id GROUP BY m.user_id ORDER BY cnt DESC",
                 )?;
                 let rows = stmt
                     .query_map([], |row| {
-                        Ok((row.get::<_, String>(0)?, row.get::<_, usize>(1)?))
+                        Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?, row.get::<_, usize>(2)?))
                     })?
                     .collect::<std::result::Result<Vec<_>, _>>()?;
                 Ok(rows)

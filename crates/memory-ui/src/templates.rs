@@ -156,7 +156,7 @@ pub struct AdminStatsPageTemplate;
 #[derive(Template, WebTemplate)]
 #[template(path = "admin/stats_data.html")]
 pub struct AdminStatsDataTemplate {
-    pub stats: Vec<(String, usize)>,
+    pub stats: Vec<(String, String, usize)>,
 }
 
 #[derive(Template, WebTemplate)]

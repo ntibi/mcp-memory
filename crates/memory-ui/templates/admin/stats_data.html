@@ -3,11 +3,11 @@
 {% else %}
 <table class="admin-table">
     <thead>
-        <tr><th>User</th><th>Memories</th></tr>
+        <tr><th>User</th><th>Name</th><th>Memories</th></tr>
     </thead>
     <tbody>
-        {% for (user_id, count) in stats %}
-        <tr><td><code>{{ user_id }}</code></td><td>{{ count }}</td></tr>
+        {% for (user_id, name, count) in stats %}
+        <tr><td><code>{{ user_id }}</code></td><td>{{ name }}</td><td>{{ count }}</td></tr>
         {% endfor %}
     </tbody>
 </table>
