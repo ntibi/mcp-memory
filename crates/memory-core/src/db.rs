@@ -176,7 +176,8 @@ type Migration = fn(&rusqlite::Connection) -> std::result::Result<(), rusqlite::
 fn migrate_v2(conn: &rusqlite::Connection) -> std::result::Result<(), rusqlite::Error> {
     conn.execute_batch(
         "CREATE INDEX IF NOT EXISTS idx_memories_user_id ON memories(user_id);
-         CREATE INDEX IF NOT EXISTS idx_memory_tags_tag ON memory_tags(tag);",
+         CREATE INDEX IF NOT EXISTS idx_memory_tags_tag ON memory_tags(tag);
+         CREATE INDEX IF NOT EXISTS idx_memory_access_log_memory_id ON memory_access_log(memory_id);",
     )?;
     Ok(())
 }
