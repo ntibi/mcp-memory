@@ -416,6 +416,43 @@ pub async fn run_vote(
         eprintln!("\x1b[2K\r\u{2713} {:<30} done", clean_name);
     }
 
+    let retry_ids: Vec<String> = state
+        .conversations
+        .iter()
+        .filter(|(_, c)| {
+            c.status == VoteStatus::Evaluated
+                && project_filter
+                    .map(|f| c.project.contains(f))
+                    .unwrap_or(true)
+        })
+        .map(|(id, _)| id.clone())
+        .collect();
+
+    if !retry_ids.is_empty() {
+        eprintln!(
+            "retrying {} conversations with unsubmitted votes...",
+            retry_ids.len()
+        );
+        for session_id in &retry_ids {
+            let conv_state = state.conversations.get_mut(session_id).unwrap();
+            let unsubmitted = conv_state.votes.iter().filter(|v| !v.submitted).count();
+            eprint!(
+                "\x1b[2K\r  {} | submitting {} votes...",
+                session_id, unsubmitted
+            );
+            let (submitted, failed) =
+                submit_votes(&client, base_url, api_key, &mut conv_state.votes).await?;
+            total_voted += submitted;
+            total_failed += failed;
+
+            if conv_state.votes.iter().all(|v| v.submitted) {
+                conv_state.status = VoteStatus::Voted;
+            }
+            state.save(state_path)?;
+        }
+        eprintln!("\x1b[2K\rdone retrying");
+    }
+
     println!();
     println!(
         "evaluated: {total_evaluated}, voted: {total_voted}, skipped (no memories): {total_skipped}, failed: {total_failed}"
