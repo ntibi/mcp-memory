@@ -89,6 +89,7 @@ async fn list_memories(
         tags,
         limit: query.limit,
         offset: query.offset,
+        ..Default::default()
     };
 
     match state.store.list(&auth.user_id, filter).await {

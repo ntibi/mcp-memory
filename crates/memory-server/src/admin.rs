@@ -139,6 +139,7 @@ async fn list_all_memories(
         tags: vec![],
         limit: query.limit,
         offset: query.offset,
+        ..Default::default()
     };
     match query.user_id {
         Some(uid) => match state.store.list(&uid, filter).await {

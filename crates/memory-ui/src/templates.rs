@@ -97,6 +97,14 @@ pub struct CardGridTemplate {
     pub next_cursor: String,
     pub query: String,
     pub tag: String,
+    pub sort: String,
+}
+
+#[derive(Template, WebTemplate)]
+#[template(path = "memory_view.html")]
+pub struct MemoryViewTemplate {
+    pub card: MemoryCard,
+    pub is_admin: bool,
 }
 
 #[derive(Template, WebTemplate)]

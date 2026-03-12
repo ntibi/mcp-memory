@@ -8,10 +8,12 @@ use axum_htmx::HxRequest;
 use memory_core::users::AuthContext;
 use serde::Deserialize;
 
+use memory_core::memory::SortOrder;
+
 use crate::UiState;
 use crate::templates::{
     CardEditTemplate, CardGridTemplate, CardTemplate, LayoutTemplate, LoginTemplate, MemoryCard,
-    TagSidebarTemplate, VoteButtonsTemplate,
+    MemoryViewTemplate, TagSidebarTemplate, VoteButtonsTemplate,
 };
 
 #[derive(Deserialize, Default)]
@@ -19,6 +21,7 @@ pub struct MemoryQuery {
     pub q: Option<String>,
     pub tag: Option<String>,
     pub cursor: Option<String>,
+    pub sort: Option<SortOrder>,
 }
 
 pub async fn index(
@@ -46,6 +49,7 @@ pub async fn list_memories(
     let offset = q.cursor.as_deref().and_then(|c| c.parse::<usize>().ok()).unwrap_or(0);
     let is_semantic = q.q.as_ref().is_some_and(|s| !s.is_empty());
     let tags = q.tag.as_deref().map(memory_core::tags::parse_comma_separated).unwrap_or_default();
+    let sort = q.sort.unwrap_or_default();
 
     let scored_results = if let Some(ref query) = q.q {
         if query.is_empty() {
@@ -53,6 +57,7 @@ pub async fn list_memories(
                 tags: tags.clone(),
                 limit: Some(limit + 1),
                 offset: Some(offset),
+                sort,
             }).await.map(|mems| mems.into_iter().map(|m| (m, None)).collect::<Vec<_>>())
         } else {
             state.store.recall(&auth.user_id, query, limit + 1, state.embedder.as_ref(), state.scorer.as_ref()).await
@@ -63,6 +68,7 @@ pub async fn list_memories(
             tags: tags.clone(),
             limit: Some(limit + 1),
             offset: Some(offset),
+            sort,
         }).await.map(|mems| mems.into_iter().map(|m| (m, None)).collect::<Vec<_>>())
     };
 
@@ -84,12 +90,17 @@ pub async fn list_memories(
 
             let next_cursor = (offset + cards.len()).to_string();
 
+            let sort_str = serde_json::to_value(sort).ok()
+                .and_then(|v| v.as_str().map(|s| s.to_string()))
+                .unwrap_or_default();
+
             CardGridTemplate {
                 memories: cards,
                 has_more,
                 next_cursor,
                 query: q.q.unwrap_or_default(),
                 tag: tags.join(","),
+                sort: sort_str,
             }.into_response()
         }
         Err(e) => {
@@ -208,6 +219,39 @@ pub async fn update_memory(
 
 pub async fn login_page() -> Response {
     LoginTemplate.into_response()
+}
+
+pub async fn view_memory(
+    State(state): State<UiState>,
+    Extension(auth): Extension<AuthContext>,
+    HxRequest(is_htmx): HxRequest,
+    Path(id): Path<String>,
+) -> Response {
+    if is_htmx {
+        return get_card_inner(&state, &auth, &id).await;
+    }
+
+    let memory = match state.store.get(&auth.user_id, &id).await {
+        Ok(m) => m,
+        Err(_) => return StatusCode::NOT_FOUND.into_response(),
+    };
+    let (helpful, harmful) = state.store.get_vote_counts(&id).await.unwrap_or((0, 0));
+
+    MemoryViewTemplate {
+        card: MemoryCard::from_memory(memory, helpful, harmful),
+        is_admin: auth.is_admin,
+    }.into_response()
+}
+
+async fn get_card_inner(state: &UiState, auth: &AuthContext, id: &str) -> Response {
+    let memory = match state.store.get(&auth.user_id, id).await {
+        Ok(m) => m,
+        Err(_) => return StatusCode::NOT_FOUND.into_response(),
+    };
+    let (helpful, harmful) = state.store.get_vote_counts(id).await.unwrap_or((0, 0));
+    CardTemplate {
+        card: MemoryCard::from_memory(memory, helpful, harmful),
+    }.into_response()
 }
 
 pub async fn get_card(

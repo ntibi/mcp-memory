@@ -25,11 +25,24 @@ pub struct CreateMemory {
     pub tags: Vec<String>,
 }
 
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, Default, PartialEq)]
+#[serde(rename_all = "snake_case")]
+pub enum SortOrder {
+    #[default]
+    Newest,
+    Oldest,
+    MostUsed,
+    LeastUsed,
+    MostUseful,
+    MostHarmful,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct ListFilter {
     pub tags: Vec<String>,
     pub limit: Option<usize>,
     pub offset: Option<usize>,
+    pub sort: SortOrder,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -147,17 +160,23 @@ impl MemoryStore {
         let limit = filter.limit.unwrap_or(50);
         let offset = filter.offset.unwrap_or(0);
         let tags = filter.tags;
+        let sort = filter.sort;
         let user_id = user_id.to_string();
 
         self.conn
             .call(move |conn| {
+                let (extra_join, order_by) = sort_clause(sort);
+
                 let ids: Vec<String> = if tags.is_empty() {
-                    let mut stmt = conn.prepare(
-                        "SELECT id FROM memories \
-                         WHERE user_id = ?1 \
-                         ORDER BY created_at DESC \
-                         LIMIT ?2 OFFSET ?3",
-                    )?;
+                    let sql = format!(
+                        "SELECT m.id FROM memories m \
+                         {extra_join} \
+                         WHERE m.user_id = ?1 \
+                         GROUP BY m.id \
+                         ORDER BY {order_by} \
+                         LIMIT ?2 OFFSET ?3"
+                    );
+                    let mut stmt = conn.prepare(&sql)?;
                     let rows = stmt.query_map(
                         rusqlite::params![user_id, limit as i64, offset as i64],
                         |row| row.get(0),
@@ -170,9 +189,10 @@ impl MemoryStore {
                     let sql = format!(
                         "SELECT m.id FROM memories m \
                          JOIN memory_tags mt ON m.id = mt.memory_id \
+                         {extra_join} \
                          WHERE m.user_id = ?1 AND {} \
                          GROUP BY m.id {} \
-                         ORDER BY m.created_at DESC \
+                         ORDER BY {order_by} \
                          LIMIT ?{limit_param} OFFSET ?{offset_param}",
                         tq.where_clause, tq.having_clause
                     );
@@ -837,6 +857,29 @@ struct TagQuery {
     having_clause: String,
     params: Vec<Box<dyn rusqlite::types::ToSql>>,
     next_param_idx: usize,
+}
+
+fn sort_clause(sort: SortOrder) -> (&'static str, &'static str) {
+    match sort {
+        SortOrder::Newest => ("", "m.created_at DESC"),
+        SortOrder::Oldest => ("", "m.created_at ASC"),
+        SortOrder::MostUsed => (
+            "LEFT JOIN memory_access_log al ON m.id = al.memory_id",
+            "COUNT(al.rowid) DESC, m.created_at DESC",
+        ),
+        SortOrder::LeastUsed => (
+            "LEFT JOIN memory_access_log al ON m.id = al.memory_id",
+            "COUNT(al.rowid) ASC, m.created_at DESC",
+        ),
+        SortOrder::MostUseful => (
+            "LEFT JOIN memory_votes mv ON m.id = mv.memory_id AND mv.vote = 'helpful'",
+            "COUNT(mv.id) DESC, m.created_at DESC",
+        ),
+        SortOrder::MostHarmful => (
+            "LEFT JOIN memory_votes mv ON m.id = mv.memory_id AND mv.vote = 'harmful'",
+            "COUNT(mv.id) DESC, m.created_at DESC",
+        ),
+    }
 }
 
 fn build_tag_query(tags: &[String], first_param_idx: usize) -> TagQuery {

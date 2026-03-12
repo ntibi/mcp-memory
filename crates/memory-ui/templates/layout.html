@@ -31,6 +31,14 @@
                        hx-push-url="true"
                        hx-indicator="#search-indicator">
                 <span id="search-indicator" class="htmx-indicator" aria-busy="true"></span>
+                <select class="sort-select" onchange="changeSort(this.value)">
+                    <option value="newest">Newest</option>
+                    <option value="oldest">Oldest</option>
+                    <option value="most_used">Most used</option>
+                    <option value="least_used">Least used</option>
+                    <option value="most_useful">Most useful</option>
+                    <option value="most_harmful">Most harmful</option>
+                </select>
                 <a href="/ui/curation" class="nav-link curation-link" aria-label="Curation">
                     Curation
                     <span hx-get="/ui/curation/indicator" hx-trigger="load, every 10s" hx-swap="innerHTML"></span>
@@ -66,14 +74,26 @@
     <script>
         var currentTags = (new URLSearchParams(window.location.search).get('tag') || '')
             .split(',').filter(function(t) { return t.length > 0; });
+        var currentSort = new URLSearchParams(window.location.search).get('sort') || 'newest';
 
         function tagParam() {
             return currentTags.join(',');
         }
 
-        function tagUrl(base) {
-            var p = tagParam();
-            return p ? base + '?tag=' + encodeURIComponent(p) : base;
+        function buildParams() {
+            var params = [];
+            if (currentQuery) params.push('q=' + encodeURIComponent(currentQuery));
+            if (currentTags.length) params.push('tag=' + encodeURIComponent(tagParam()));
+            if (currentSort && currentSort !== 'newest') params.push('sort=' + encodeURIComponent(currentSort));
+            return params.length ? '?' + params.join('&') : '';
+        }
+
+        function feedUrl() {
+            return '/ui/memories' + buildParams();
+        }
+
+        function pushUrl() {
+            return '/ui' + buildParams();
         }
 
         var currentQuery = new URLSearchParams(window.location.search).get('q') || '';
@@ -81,15 +101,15 @@
         (function() {
             var grid = document.getElementById('card-grid');
             if (grid) {
-                var params = [];
-                if (currentQuery) params.push('q=' + encodeURIComponent(currentQuery));
-                if (currentTags.length) params.push('tag=' + encodeURIComponent(tagParam()));
-                if (params.length) grid.setAttribute('hx-get', '/ui/memories?' + params.join('&'));
+                var url = feedUrl();
+                if (url !== '/ui/memories') grid.setAttribute('hx-get', url);
             }
             if (currentQuery) {
                 var input = document.querySelector('.search-bar');
                 if (input) input.value = currentQuery;
             }
+            var sortSelect = document.querySelector('.sort-select');
+            if (sortSelect) sortSelect.value = currentSort;
         })();
 
         document.body.addEventListener('htmx:configRequest', function(e) {
@@ -99,6 +119,14 @@
             }
             if (e.detail.elt.classList.contains('sidebar')) {
                 e.detail.parameters.tag = tagParam();
+            }
+            if (e.detail.elt.classList.contains('search-bar')) {
+                if (currentSort && currentSort !== 'newest') {
+                    e.detail.parameters.sort = currentSort;
+                }
+                if (currentTags.length) {
+                    e.detail.parameters.tag = tagParam();
+                }
             }
         });
 
@@ -123,6 +151,16 @@
             localStorage.setItem('theme', next);
         }
 
+        function refreshFeed() {
+            htmx.ajax('GET', feedUrl(), {target: '#card-grid', swap: 'innerHTML'});
+            history.pushState({}, '', pushUrl() || '/ui');
+        }
+
+        function changeSort(value) {
+            currentSort = value;
+            refreshFeed();
+        }
+
         function clearTags(el) {
             currentTags = [];
             document.querySelectorAll('.sidebar li a').forEach(function(a) {
@@ -140,10 +178,7 @@
             } else {
                 currentTags = [tag];
             }
-            var url = tagUrl('/ui/memories');
-            var pushUrl = tagUrl('/ui');
-            htmx.ajax('GET', url, {target: '#card-grid', swap: 'innerHTML'});
-            history.pushState({}, '', pushUrl || '/ui');
+            refreshFeed();
             htmx.ajax('GET', '/ui/tags?tag=' + encodeURIComponent(tagParam()), {target: '.sidebar', swap: 'innerHTML'});
         }
 
@@ -155,8 +190,7 @@
                     currentTags = [tag];
                 }
                 htmx.ajax('GET', '/ui/tags?tag=' + encodeURIComponent(tagParam()), {target: '.sidebar', swap: 'innerHTML'});
-                htmx.ajax('GET', '/ui/memories?tag=' + encodeURIComponent(tagParam()), {target: '#card-grid', swap: 'innerHTML'});
-                history.pushState({}, '', tagUrl('/ui'));
+                refreshFeed();
             }
         });
 

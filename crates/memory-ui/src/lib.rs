@@ -22,6 +22,7 @@ pub fn router() -> Router<UiState> {
         .route("/memories", get(handlers::list_memories))
         .route("/memories/{id}/vote", post(handlers::vote_memory))
         .route("/memories/{id}", put(handlers::update_memory).delete(handlers::delete_memory))
+        .route("/memories/{id}/view", get(handlers::view_memory))
         .route("/memories/{id}/edit", get(handlers::edit_memory_form))
         .route("/memories/{id}/card", get(handlers::get_card))
         .route("/tags", get(handlers::list_tags))
