@@ -75,6 +75,7 @@
         var currentTags = (new URLSearchParams(window.location.search).get('tag') || '')
             .split(',').filter(function(t) { return t.length > 0; });
         var currentSort = new URLSearchParams(window.location.search).get('sort') || 'newest';
+        var currentTagView = localStorage.getItem('tagView') || 'list';
 
         function tagParam() {
             return currentTags.join(',');
@@ -119,6 +120,7 @@
             }
             if (e.detail.elt.classList.contains('sidebar')) {
                 e.detail.parameters.tag = tagParam();
+                e.detail.parameters.view = currentTagView;
             }
             if (e.detail.elt.classList.contains('search-bar')) {
                 if (currentSort && currentSort !== 'newest') {
@@ -161,9 +163,15 @@
             refreshFeed();
         }
 
+        function toggleTagView() {
+            currentTagView = currentTagView === 'list' ? 'cloud' : 'list';
+            localStorage.setItem('tagView', currentTagView);
+            htmx.ajax('GET', '/ui/tags?tag=' + encodeURIComponent(tagParam()) + '&view=' + currentTagView, {target: '.sidebar', swap: 'innerHTML'});
+        }
+
         function clearTags(el) {
             currentTags = [];
-            document.querySelectorAll('.sidebar li a').forEach(function(a) {
+            document.querySelectorAll('.sidebar a').forEach(function(a) {
                 a.classList.remove('active');
             });
             el.classList.add('active');
@@ -179,7 +187,7 @@
                 currentTags = [tag];
             }
             refreshFeed();
-            htmx.ajax('GET', '/ui/tags?tag=' + encodeURIComponent(tagParam()), {target: '.sidebar', swap: 'innerHTML'});
+            htmx.ajax('GET', '/ui/tags?tag=' + encodeURIComponent(tagParam()) + '&view=' + currentTagView, {target: '.sidebar', swap: 'innerHTML'});
         }
 
         document.body.addEventListener('click', function(e) {
@@ -189,7 +197,7 @@
                 if (currentTags.indexOf(tag) < 0) {
                     currentTags = [tag];
                 }
-                htmx.ajax('GET', '/ui/tags?tag=' + encodeURIComponent(tagParam()), {target: '.sidebar', swap: 'innerHTML'});
+                htmx.ajax('GET', '/ui/tags?tag=' + encodeURIComponent(tagParam()) + '&view=' + currentTagView, {target: '.sidebar', swap: 'innerHTML'});
                 refreshFeed();
             }
         });

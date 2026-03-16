@@ -1,12 +1,35 @@
-<ul>
-    <li><a href="#"
-           hx-get="/ui/memories"
-           hx-target="#card-grid"
-           hx-push-url="/ui"
-           onclick="clearTags(this)"
-           {% if active_tags.is_empty() %}class="active"{% endif %}>
+<div class="tag-header">
+    <a href="#"
+       hx-get="/ui/memories"
+       hx-target="#card-grid"
+       hx-push-url="/ui"
+       onclick="clearTags(this)"
+       class="tag-all {% if active_tags.is_empty() %}active{% endif %}">
         <span class="tag-name">All</span> <span class="tag-count">{{ total_count }}</span>
-    </a></li>
+    </a>
+    <button class="tag-view-toggle"
+            onclick="toggleTagView()"
+            title="Toggle view">
+        {% if view.is_cloud() %}
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/></svg>
+        {% else %}
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20.59 13.41l-7.17 7.17a2 2 0 01-2.83 0L2 12V2h10l8.59 8.59a2 2 0 010 2.82z"/><line x1="7" y1="7" x2="7.01" y2="7"/></svg>
+        {% endif %}
+    </button>
+</div>
+{% if view.is_cloud() %}
+<div class="tag-cloud">
+    {% for item in crate::templates::build_cloud_items(&tags) %}
+    <a href="#"
+       data-tag="{{ item.tag }}"
+       data-weight="{{ item.weight }}"
+       onclick="toggleTag(event, this)"
+       {% if active_tags.contains(&item.tag) %}class="active"{% endif %}
+       title="{{ item.tag }} ({{ item.count }})">{{ item.tag }}</a>
+    {% endfor %}
+</div>
+{% else %}
+<ul>
     {% for tag in tags %}
     <li><a href="#"
            data-tag="{{ tag.0 }}"
@@ -17,3 +40,4 @@
     </a></li>
     {% endfor %}
 </ul>
+{% endif %}

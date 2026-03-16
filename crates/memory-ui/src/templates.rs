@@ -125,6 +125,45 @@ pub struct TagSidebarTemplate {
     pub tags: Vec<(String, usize)>,
     pub total_count: usize,
     pub active_tags: Vec<String>,
+    pub view: TagView,
+}
+
+#[derive(Default, Clone, Copy, PartialEq)]
+pub enum TagView {
+    #[default]
+    List,
+    Cloud,
+}
+
+impl TagView {
+    pub fn is_cloud(&self) -> bool {
+        *self == TagView::Cloud
+    }
+}
+
+pub struct TagCloudItem {
+    pub tag: String,
+    pub count: usize,
+    pub weight: u8,
+}
+
+pub fn build_cloud_items(tags: &[(String, usize)]) -> Vec<TagCloudItem> {
+    if tags.is_empty() {
+        return vec![];
+    }
+    let max = tags.iter().map(|(_, c)| *c).max().unwrap_or(1) as f64;
+    let min = tags.iter().map(|(_, c)| *c).min().unwrap_or(1) as f64;
+    let log_min = min.max(1.0).ln();
+    let log_max = max.max(1.0).ln();
+    tags.iter().map(|(tag, count)| {
+        let weight = if log_max <= log_min {
+            3
+        } else {
+            let normalized = ((*count as f64).max(1.0).ln() - log_min) / (log_max - log_min);
+            (normalized * 4.0).round() as u8 + 1
+        };
+        TagCloudItem { tag: tag.clone(), count: *count, weight }
+    }).collect()
 }
 
 #[derive(Template, WebTemplate)]

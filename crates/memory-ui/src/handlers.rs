@@ -22,6 +22,7 @@ pub struct MemoryQuery {
     pub tag: Option<String>,
     pub cursor: Option<String>,
     pub sort: Option<SortOrder>,
+    pub view: Option<String>,
 }
 
 pub async fn index(
@@ -115,6 +116,10 @@ pub async fn list_tags(
     Extension(auth): Extension<AuthContext>,
     Query(q): Query<MemoryQuery>,
 ) -> Response {
+    let view = match q.view.as_deref() {
+        Some("cloud") => crate::templates::TagView::Cloud,
+        _ => crate::templates::TagView::List,
+    };
     match state.store.list_tags(&auth.user_id).await {
         Ok(tags) => {
             let total_count = state.store.count(&auth.user_id).await.unwrap_or(0);
@@ -122,6 +127,7 @@ pub async fn list_tags(
                 tags,
                 total_count,
                 active_tags: q.tag.as_deref().map(memory_core::tags::parse_comma_separated).unwrap_or_default(),
+                view,
             }.into_response()
         }
         Err(e) => {

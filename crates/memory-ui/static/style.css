@@ -286,6 +286,103 @@ header {
     color: white;
 }
 
+/* ── Tag header ────────────────────────────── */
+.tag-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 0.4rem 0.65rem;
+    margin-bottom: 0.25rem;
+}
+
+.tag-all {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    font-size: 0.8125rem;
+    color: var(--text-secondary);
+    border-radius: var(--radius-sm);
+    padding: 0.15rem 0.35rem;
+    transition: all 0.15s ease;
+}
+
+.tag-all:hover {
+    background: var(--accent-light);
+    color: var(--accent-hover);
+}
+
+.tag-all.active {
+    color: var(--accent-hover);
+    font-weight: 600;
+}
+
+.tag-all .tag-count {
+    font-size: 0.7rem;
+    color: var(--text-muted);
+    background: var(--border-light);
+    padding: 0.1rem 0.45rem;
+    border-radius: 4px;
+    font-weight: 600;
+    font-variant-numeric: tabular-nums;
+}
+
+.tag-all.active .tag-count {
+    background: var(--accent);
+    color: white;
+}
+
+.tag-view-toggle {
+    background: transparent;
+    border: none;
+    color: var(--text-muted);
+    padding: 0.25rem;
+    border-radius: var(--radius-sm);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: color 0.15s ease;
+}
+
+.tag-view-toggle:hover {
+    color: var(--text-primary);
+}
+
+/* ── Tag cloud ─────────────────────────────── */
+.tag-cloud {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.35rem;
+    padding: 0.5rem;
+    align-items: baseline;
+    justify-content: center;
+}
+
+.tag-cloud a {
+    display: inline-block;
+    color: var(--tag-text);
+    transition: all 0.15s ease;
+    line-height: 1.4;
+    padding: 0.1rem 0.25rem;
+    border-radius: var(--radius-sm);
+}
+
+.tag-cloud a:hover {
+    color: var(--accent-hover);
+    background: var(--accent-light);
+}
+
+.tag-cloud a.active {
+    color: var(--accent-hover);
+    background: var(--accent-light);
+    font-weight: 600;
+}
+
+.tag-cloud a[data-weight="1"] { font-size: 0.65rem; opacity: 0.65; }
+.tag-cloud a[data-weight="2"] { font-size: 0.75rem; opacity: 0.75; }
+.tag-cloud a[data-weight="3"] { font-size: 0.875rem; opacity: 0.85; }
+.tag-cloud a[data-weight="4"] { font-size: 1.05rem; opacity: 0.95; }
+.tag-cloud a[data-weight="5"] { font-size: 1.25rem; opacity: 1; }
+
 /* ── Card grid ──────────────────────────────── */
 #card-grid {
     display: grid;
